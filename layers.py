@@ -24,7 +24,7 @@ class CNN(nn.Module):
         self.filters = filters
         self.width = width
 
-        self.embeddings = nn.Embedding.from_pretrained(char_embeddings)
+        self.embeddings = nn.Embedding.from_pretrained(char_embeddings, freeze=False)
         self.conv1d = nn.Conv1d(self.e_char, self.filters, self.width)
         self.relu = nn.ReLU()
 
