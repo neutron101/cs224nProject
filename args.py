@@ -204,6 +204,9 @@ def add_common_args(parser):
 
 
 def add_train_test_args(parser):
+
+    add_model_args(parser)
+    
     """Add arguments common to train.py and test.py"""
     parser.add_argument('--name',
                         '-n',
@@ -243,3 +246,16 @@ def add_train_test_args(parser):
                         type=str,
                         default=None,
                         help='Path to load as a model checkpoint.')
+
+def add_model_args(parser):
+
+    add_charmodel_args(parser)
+
+
+def add_charmodel_args(parser):
+
+    parser.add_argument('--cnn_features',
+                        type=int,
+                        default=100,
+                        help='Number of cnn features/char embedding vector size.')
+

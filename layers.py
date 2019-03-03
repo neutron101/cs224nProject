@@ -12,6 +12,48 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
 
 
+class CNN(nn.Module):
+
+    # filter size and width from the paper
+    # https://arxiv.org/pdf/1611.01603.pdf
+    def __init__(self, char_embeddings, filters=100, width=5):
+
+        super(CNN, self).__init__()
+
+        self.e_char = char_embeddings.size(1)
+        self.filters = filters
+        self.width = width
+
+        self.embeddings = nn.Embedding.from_pretrained(char_embeddings)
+        self.conv1d = nn.Conv1d(self.e_char, self.filters, self.width)
+        self.relu = nn.ReLU()
+
+    def forward(self, chars: torch.Tensor) -> torch.Tensor:
+        #list of words with length m_word
+        # @param x_reshaped (Tensor) - # (batch_size, sentence_length, max_word_length),
+        # @returns (Tensor) - (batch_size, sentence_length, filters)
+
+        chars = self.embeddings(chars)
+        chars = chars.permute(1,0,2,3)
+
+        #(sentence_length, batch_size, max_word_length, e_char)
+        chars_size = chars.size()
+
+        o = chars.permute(1,0,2,3)
+        o = o.contiguous().view(chars_size[0]*chars_size[1], chars_size[2], chars_size[3])
+        o = o.permute(0,2,1)  
+
+        x_conv = self.conv1d(o)
+        x_conv = self.relu(x_conv)
+        m_word = o.size()[2]
+        maxpool = nn.MaxPool1d(m_word - self.width + 1) #could be initialized once
+        x_conv = maxpool(x_conv)
+
+        x_conv = x_conv.squeeze(dim=-1).view(chars_size[1], chars_size[0], -1)
+
+        return x_conv
+
+
 class Embedding(nn.Module):
     """Embedding layer used by BiDAF, without the character-level component.
 
@@ -23,17 +65,26 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, hidden_size, drop_prob):
+    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob, cnn_features):
         super(Embedding, self).__init__()
         self.drop_prob = drop_prob
         self.embed = nn.Embedding.from_pretrained(word_vectors)
         self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
-        self.hwy = HighwayEncoder(2, hidden_size)
 
-    def forward(self, x):
+        self.cemb = CNN(char_embeddings=char_vectors, filters=cnn_features)
+
+        self.hwy = HighwayEncoder(2, hidden_size+cnn_features)
+
+    def forward(self, x, c):
+        # get charCNN embeddings
+        cemb = self.cemb(c)
+
         emb = self.embed(x)   # (batch_size, seq_len, embed_size)
         emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
+
+        # concatenate word and char embeddings
+        emb = torch.cat((emb,cemb), dim=2)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
