@@ -34,8 +34,8 @@ class Berty(BertPreTrainedModel):
         self.qa_outputs = nn.Linear(config.hidden_size, word_emb_size)
         self.apply(self.init_bert_weights)
 
-        self.CLS_idx = torch.tensor([vocabulary['[CLS]']])
-        self.SEP_idx = torch.tensor([vocabulary['[SEP]']])
+        self.CLS_idx = [vocabulary['[CLS]']]
+        self.SEP_idx = [vocabulary['[SEP]']]
         self.word_emb_size = word_emb_size
 
 
@@ -51,6 +51,8 @@ class Berty(BertPreTrainedModel):
         # append SEP
         # append SEP
 
+        CLS_idx = torch.tensor(self.CLS_idx, device=cw_idxs.device)
+        SEP_idx = torch.tensor(self.SEP_idx, device=cw_idxs.device)
         max_seq_length = cw_idxs.size()[1] + qw_idxs.size()[1] + 1
 
         attention_masks = []
@@ -62,16 +64,16 @@ class Berty(BertPreTrainedModel):
 
             qwords = qw_idxs[sen]
             qwords = qwords[0: q_mask[sen].sum(-1)]
-            qwords[0] = self.CLS_idx
+            qwords[0] = CLS_idx
 
             cwords = cw_idxs[sen]
             cwords = cwords[0: c_mask[sen].sum(-1)]
-            cwords[0] = self.SEP_idx
+            cwords[0] = SEP_idx
 
             segment = torch.cat((torch.zeros(len(qwords)+1, device=cw_idxs.device, dtype=qwords.dtype), \
                                  torch.ones(len(cwords), device=cw_idxs.device, dtype=qwords.dtype)))
 
-            qwords = torch.cat((qwords, cwords, self.SEP_idx))
+            qwords = torch.cat((qwords, cwords, SEP_idx))
 
             balance = (max_seq_length - len(qwords))
             remainder = torch.zeros(balance, dtype=qwords.dtype, device=qwords.device)
