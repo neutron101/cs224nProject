@@ -72,21 +72,18 @@ class Berty(BertPreTrainedModel):
             qw[st:end] = cw_idxs[sen, 1: c_mask[sen].sum()]
             qw[end] = SEP_idx[0]
 			
-            qwords = qw
-
             segment = torch.zeros(max_seq_length, device=cw_idxs.device, dtype=cw_idxs.dtype)
-            segment[q_mask[sen].sum()+1 : q_mask[sen].sum()+1+c_mask[sen].sum()] = 1
-			
-            balance = (max_seq_length - end)
-
-            attention_mask = torch.cat((torch.ones(end, dtype=cw_idxs.dtype, device=cw_idxs.device), torch.zeros(balance, dtype=cw_idxs.dtype, device=cw_idxs.device)))
-
+            segment[st : end+1] = 1
+            
+            attention_mask = torch.cat((torch.ones(end+1, dtype=cw_idxs.dtype, device=cw_idxs.device), \
+                                        torch.zeros((max_seq_length - (end+1)), dtype=cw_idxs.dtype, device=cw_idxs.device)))
 
             assert attention_mask.size()[0] == max_seq_length
-            assert qwords.size()[0] == max_seq_length
-            assert segment.size()[0] == max_seq_length
+            assert attention_mask.sum() == q_mask[sen].sum()+c_mask[sen].sum()+1
+            assert qw.size()[0] == max_seq_length
+            assert segment.sum() == c_mask[sen].sum()
 
-            input_words.append(qwords)
+            input_words.append(qw)
             attention_masks.append(attention_mask)
             segments.append(segment)
 
@@ -108,12 +105,12 @@ class Berty(BertPreTrainedModel):
             qs = torch.zeros((qlength, self.word_emb_size), device=cw_idxs.device)
             qlen = q_mask[s].sum()
             qs[1:qlen,:] = sen[1:qlen,:]
-            qs[0]=1
+            qs[0,:]=1
 
             cs = torch.zeros((clength, self.word_emb_size), device=cw_idxs.device)
             clen = c_mask[s].sum()
             cs[1:clen,:] = sen[qlen+1:qlen+clen,:]
-            cs[0]=1
+            cs[0,:]=1
         
             cws.append(cs)
             qws.append(qs)
