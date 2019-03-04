@@ -60,27 +60,27 @@ class Berty(BertPreTrainedModel):
         segments = []
 
         for sen in range(cw_idxs.shape[0]):
-            segment = []
+            qw = torch.zeros(max_seq_length, dtype=cw_idxs.dtype, device=cw_idxs.device)
+            st = 0
+            end = q_mask[sen].sum()
+            qw[st: end] = qw_idxs[sen, 0: q_mask[sen].sum()]
+            qw[0] = CLS_idx[0]
+            qw[end] = SEP_idx[0]
+			
+            st = end+1
+            end = st + c_mask[sen].sum()-1
+            qw[st:end] = cw_idxs[sen, 1: c_mask[sen].sum()]
+            qw[end] = SEP_idx[0]
+			
+            qwords = qw
 
-            qwords = qw_idxs[sen]
-            qwords = qwords[0: q_mask[sen].sum(-1)]
-            qwords[0] = CLS_idx
+            segment = torch.zeros(max_seq_length, device=cw_idxs.device, dtype=cw_idxs.dtype)
+            segment[q_mask[sen].sum()+1 : q_mask[sen].sum()+1+c_mask[sen].sum()] = 1
+			
+            balance = (max_seq_length - end)
 
-            cwords = cw_idxs[sen]
-            cwords = cwords[0: c_mask[sen].sum(-1)]
-            cwords[0] = SEP_idx
+            attention_mask = torch.cat((torch.ones(end, dtype=cw_idxs.dtype, device=cw_idxs.device), torch.zeros(balance, dtype=cw_idxs.dtype, device=cw_idxs.device)))
 
-            segment = torch.cat((torch.zeros(len(qwords)+1, device=cw_idxs.device, dtype=qwords.dtype), \
-                                 torch.ones(len(cwords), device=cw_idxs.device, dtype=qwords.dtype)))
-
-            qwords = torch.cat((qwords, cwords, SEP_idx))
-
-            balance = (max_seq_length - len(qwords))
-            remainder = torch.zeros(balance, dtype=qwords.dtype, device=qwords.device)
-
-            attention_mask = torch.cat((torch.ones(qwords.size()[0], dtype=qwords.dtype, device=qwords.device), remainder))
-            qwords = torch.cat((qwords, remainder))
-            segment = torch.cat((segment, remainder))
 
             assert attention_mask.size()[0] == max_seq_length
             assert qwords.size()[0] == max_seq_length
@@ -108,11 +108,13 @@ class Berty(BertPreTrainedModel):
             qs = torch.zeros((qlength, self.word_emb_size), device=cw_idxs.device)
             qlen = q_mask[s].sum()
             qs[1:qlen,:] = sen[1:qlen,:]
+            qs[0]=1
 
             cs = torch.zeros((clength, self.word_emb_size), device=cw_idxs.device)
             clen = c_mask[s].sum()
             cs[1:clen,:] = sen[qlen+1:qlen+clen,:]
-
+            cs[0]=1
+        
             cws.append(cs)
             qws.append(qs)
 

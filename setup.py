@@ -163,7 +163,7 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
                 if not token:
                     break
                 word = token.strip()
-                vector = list(map(float, [0]))
+                vector = list(map(float, [0. for _ in range(vec_size)]))
 
                 if word in ['[CLS]', '[SEP]', '[PAD]'] or (word in counter and counter[word] > limit):
                     embedding_dict[word] = vector
@@ -178,7 +178,14 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
         print("{} tokens have corresponding {} embedding vector".format(
             len(filtered_elements), data_type))
 
-    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys())}
+    NULL = "--NULL--"
+    OOV = "--OOV--"
+    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), 2)}
+    token2idx_dict[NULL] = 0
+    token2idx_dict[OOV] = 1
+    embedding_dict[NULL] = [0. for _ in range(vec_size)]
+    embedding_dict[OOV] = [0. for _ in range(vec_size)]
+
     idx2emb_dict = {idx: embedding_dict[token]
                     for token, idx in token2idx_dict.items()}
     emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
