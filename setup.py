@@ -155,9 +155,6 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
     filtered_elements = [k for k, v in counter.items() if v > limit]
     if emb_file is not None:
 
-        #BERT: Load from vocab online
-        #Init DUMMY vec to random vectors
-
         resolved_vocab_file = cached_path(emb_file, cache_dir='data')
 
         assert vec_size is not None
@@ -170,7 +167,6 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
 
                 if word in ['[CLS]', '[SEP]', '[PAD]'] or (word in counter and counter[word] > limit):
                     embedding_dict[word] = vector
-                    print(word)
 
         print("{} / {} tokens have corresponding {} embedding vector".format(
             len(embedding_dict), len(filtered_elements), data_type))
@@ -182,13 +178,7 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
         print("{} tokens have corresponding {} embedding vector".format(
             len(filtered_elements), data_type))
 
-    # NULL = "--NULL--"
-    # OOV = "--OOV--"
     token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys())}
-    # token2idx_dict[NULL] = 0
-    # token2idx_dict[OOV] = 1
-    # embedding_dict[NULL] = [0. for _ in range(vec_size)]
-    # embedding_dict[OOV] = [0. for _ in range(vec_size)]
     idx2emb_dict = {idx: embedding_dict[token]
                     for token, idx in token2idx_dict.items()}
     emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
