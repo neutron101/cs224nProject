@@ -7,9 +7,118 @@ Author:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
+
+from pytorch_pretrained_bert.modeling import BertPreTrainedModel
+from pytorch_pretrained_bert.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+from pytorch_pretrained_bert.modeling import BertModel
+
+class Berty(BertPreTrainedModel):
+    """Baseline BiDAF model for SQuAD.
+
+    Based on the paper:
+    "Bidirectional Attention Flow for Machine Comprehension"
+    by Minjoon Seo, Aniruddha Kembhavi, Ali Farhadi, Hannaneh Hajishirzi
+    (https://arxiv.org/abs/1611.01603).
+
+
+    Args:
+    """
+    def __init__(self, config, word_emb_size, vocabulary, max_seq_length=512):
+        super(Berty, self).__init__(config)
+        self.bert = BertModel(config)
+
+        self.qa_outputs = nn.Linear(config.hidden_size, word_emb_size)
+        self.apply(self.init_bert_weights)
+
+        self.CLS_idx = torch.tensor([vocabulary['[CLS]']])
+        self.SEP_idx = torch.tensor([vocabulary['[SEP]']])
+        self.word_emb_size = word_emb_size
+
+
+    def forward(self, cw_idxs, qw_idxs, c_mask, q_mask):
+
+        # The convention in BERT is:
+        # (a) For sequence pairs: <query> <context>
+        #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+        #  type_ids:   0   0  0    0    0     0      0   0    1  1  1   1  1   1
+
+        # PAD at the end of 
+        # prepend CLS
+        # append SEP
+        # append SEP
+
+        max_seq_length = cw_idxs.size()[1] + qw_idxs.size()[1] + 1
+
+        attention_masks = []
+        input_words = []
+        segments = []
+
+        for sen in range(cw_idxs.shape[0]):
+            segment = []
+
+            qwords = qw_idxs[sen]
+            qwords = qwords[0: q_mask[sen].sum(-1)]
+            qwords[0] = self.CLS_idx
+
+            cwords = cw_idxs[sen]
+            cwords = cwords[0: c_mask[sen].sum(-1)]
+            cwords[0] = self.SEP_idx
+
+            segment = torch.cat((torch.zeros(len(qwords)+1, device=cw_idxs.device, dtype=qwords.dtype), \
+                                 torch.ones(len(cwords), device=cw_idxs.device, dtype=qwords.dtype)))
+
+            qwords = torch.cat((qwords, cwords, self.SEP_idx))
+
+            balance = (max_seq_length - len(qwords))
+            remainder = torch.zeros(balance, dtype=qwords.dtype, device=qwords.device)
+
+            attention_mask = torch.cat((torch.ones(qwords.size()[0], dtype=qwords.dtype, device=qwords.device), remainder))
+            qwords = torch.cat((qwords, remainder))
+            segment = torch.cat((segment, remainder))
+
+            assert attention_mask.size()[0] == max_seq_length
+            assert qwords.size()[0] == max_seq_length
+            assert segment.size()[0] == max_seq_length
+
+            input_words.append(qwords)
+            attention_masks.append(attention_mask)
+            segments.append(segment)
+
+        input_words = torch.stack(input_words, dim=0)
+        attention_masks = torch.stack(attention_masks, dim=0)
+        segments = torch.stack(segments, dim=0)
+
+        output, _ = self.bert(input_words, segments, attention_masks, output_all_encoded_layers=False)
+        emb = self.qa_outputs(output)
+
+        cws = []
+        qws = []
+        qlength = qw_idxs.shape[1]
+        clength = cw_idxs.shape[1]
+
+        for s in range(emb.size()[0]):
+            sen = emb[s]
+
+            qs = torch.zeros((qlength, self.word_emb_size), device=cw_idxs.device)
+            qlen = q_mask[s].sum()
+            qs[1:qlen,:] = sen[1:qlen,:]
+
+            cs = torch.zeros((clength, self.word_emb_size), device=cw_idxs.device)
+            clen = c_mask[s].sum()
+            cs[1:clen,:] = sen[qlen+1:qlen+clen,:]
+
+            cws.append(cs)
+            qws.append(qs)
+
+        cws = torch.stack(cws, dim=0)
+        qws = torch.stack(qws, dim=0)
+
+
+        return cws, qws
 
 
 class CNN(nn.Module):
@@ -65,29 +174,41 @@ class Embedding(nn.Module):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, word_vectors, char_vectors, hidden_size, drop_prob, cnn_features):
+    def __init__(self, vocabulary, char_vectors, drop_prob, cnn_features, word_emb_size, max_seq_length, hidden_size):
         super(Embedding, self).__init__()
-        self.drop_prob = drop_prob
-        self.embed = nn.Embedding.from_pretrained(word_vectors)
-        self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
 
+        self.embed = Berty.from_pretrained('bert-base-uncased', \
+            cache_dir=os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(1)), word_emb_size=word_emb_size, vocabulary=vocabulary)
+        
         self.cemb = CNN(char_embeddings=char_vectors, filters=cnn_features)
+        self.drop_prob = drop_prob
 
+        self.proj = nn.Linear(word_emb_size, hidden_size, bias=False)
         self.hwy = HighwayEncoder(2, hidden_size+cnn_features)
 
-    def forward(self, x, c):
+
+    def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs, c_mask, q_mask):
         # get charCNN embeddings
-        cemb = self.cemb(c)
+        cc_emb = self.cemb(cc_idxs)
+        qc_emb = self.cemb(qc_idxs)
 
-        emb = self.embed(x)   # (batch_size, seq_len, embed_size)
-        emb = F.dropout(emb, self.drop_prob, self.training)
+        embc, embq = self.embed(cw_idxs, qw_idxs, c_mask, q_mask)   # (batch_size, seq_len, embed_size)
+        
+        # CONTEXT
+        emb = F.dropout(embc, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
-
         # concatenate word and char embeddings
-        emb = torch.cat((emb,cemb), dim=2)
-        emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
+        emb = torch.cat((emb,cc_emb), dim=2)
+        embc = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
-        return emb
+        # QUERY
+        emb = F.dropout(embq, self.drop_prob, self.training)
+        emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
+        # concatenate word and char embeddings
+        emb = torch.cat((emb,qc_emb), dim=2)
+        embq = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
+
+        return embc, embq
 
 
 class HighwayEncoder(nn.Module):

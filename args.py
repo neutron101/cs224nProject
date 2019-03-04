@@ -30,23 +30,23 @@ def get_setup_args():
                         default='./data/dev_meta.json')
     parser.add_argument('--test_meta_file',
                         type=str,
-                        default='./data/test_meta.json')
+                        default='./data/test_meta_bert.json')
     parser.add_argument('--word2idx_file',
                         type=str,
-                        default='./data/word2idx.json')
+                        default='./data/word2idx_bert.json')
     parser.add_argument('--char2idx_file',
                         type=str,
-                        default='./data/char2idx.json')
+                        default='./data/char2idx_bert.json')
     parser.add_argument('--answer_file',
                         type=str,
                         default='./data/answer.json')
     parser.add_argument('--para_limit',
                         type=int,
-                        default=400,
+                        default=128,
                         help='Max number of words in a paragraph')
     parser.add_argument('--ques_limit',
                         type=int,
-                        default=50,
+                        default=56,
                         help='Max number of words to keep from a question')
     parser.add_argument('--test_para_limit',
                         type=int,
@@ -179,34 +179,34 @@ def add_common_args(parser):
     """Add arguments common to all 3 scripts: setup.py, train.py, test.py"""
     parser.add_argument('--train_record_file',
                         type=str,
-                        default='./data/train.npz')
+                        default='./data/train_bert.npz')
     parser.add_argument('--dev_record_file',
                         type=str,
-                        default='./data/dev.npz')
+                        default='./data/dev_bert.npz')
     parser.add_argument('--test_record_file',
                         type=str,
-                        default='./data/test.npz')
+                        default='./data/test_bert.npz')
     parser.add_argument('--word_emb_file',
                         type=str,
-                        default='./data/word_emb.json')
+                        default='./data/word_emb_bert.json')
     parser.add_argument('--char_emb_file',
                         type=str,
-                        default='./data/char_emb.json')
+                        default='./data/char_emb_bert.json')
     parser.add_argument('--train_eval_file',
                         type=str,
-                        default='./data/train_eval.json')
+                        default='./data/train_eval_bert.json')
     parser.add_argument('--dev_eval_file',
                         type=str,
-                        default='./data/dev_eval.json')
+                        default='./data/dev_eval_bert.json')
     parser.add_argument('--test_eval_file',
                         type=str,
-                        default='./data/test_eval.json')
+                        default='./data/test_eval_bert.json')
 
 
 def add_train_test_args(parser):
 
     add_model_args(parser)
-    
+
     """Add arguments common to train.py and test.py"""
     parser.add_argument('--name',
                         '-n',

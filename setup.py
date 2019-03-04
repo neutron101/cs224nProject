@@ -23,7 +23,7 @@ from collections import Counter
 from subprocess import run
 from tqdm import tqdm
 from zipfile import ZipFile
-
+from pytorch_pretrained_bert.file_utils import cached_path
 
 def download_url(url, output_path, show_progress=True):
     class DownloadProgressBar(tqdm):
@@ -148,19 +148,30 @@ def process_file(filename, data_type, word_counter, char_counter):
     return examples, eval_examples
 
 
+
 def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, num_vectors=None):
     print("Pre-processing {} vectors...".format(data_type))
     embedding_dict = {}
     filtered_elements = [k for k, v in counter.items() if v > limit]
     if emb_file is not None:
+
+        #BERT: Load from vocab online
+        #Init DUMMY vec to random vectors
+
+        resolved_vocab_file = cached_path(emb_file, cache_dir='data')
+
         assert vec_size is not None
-        with open(emb_file, "r", encoding="utf-8") as fh:
-            for line in tqdm(fh, total=num_vectors):
-                array = line.split()
-                word = "".join(array[0:-vec_size])
-                vector = list(map(float, array[-vec_size:]))
-                if word in counter and counter[word] > limit:
+        with open(resolved_vocab_file, "r", encoding="utf-8") as fh:
+            for token in tqdm(fh):
+                if not token:
+                    break
+                word = token.strip()
+                vector = list(map(float, [0]))
+
+                if word in ['[CLS]', '[SEP]', '[PAD]'] or (word in counter and counter[word] > limit):
                     embedding_dict[word] = vector
+                    print(word)
+
         print("{} / {} tokens have corresponding {} embedding vector".format(
             len(embedding_dict), len(filtered_elements), data_type))
     else:
@@ -171,13 +182,13 @@ def get_embedding(counter, data_type, limit=-1, emb_file=None, vec_size=None, nu
         print("{} tokens have corresponding {} embedding vector".format(
             len(filtered_elements), data_type))
 
-    NULL = "--NULL--"
-    OOV = "--OOV--"
-    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys(), 2)}
-    token2idx_dict[NULL] = 0
-    token2idx_dict[OOV] = 1
-    embedding_dict[NULL] = [0. for _ in range(vec_size)]
-    embedding_dict[OOV] = [0. for _ in range(vec_size)]
+    # NULL = "--NULL--"
+    # OOV = "--OOV--"
+    token2idx_dict = {token: idx for idx, token in enumerate(embedding_dict.keys())}
+    # token2idx_dict[NULL] = 0
+    # token2idx_dict[OOV] = 1
+    # embedding_dict[NULL] = [0. for _ in range(vec_size)]
+    # embedding_dict[OOV] = [0. for _ in range(vec_size)]
     idx2emb_dict = {idx: embedding_dict[token]
                     for token, idx in token2idx_dict.items()}
     emb_mat = [idx2emb_dict[idx] for idx in range(len(idx2emb_dict))]
@@ -349,12 +360,17 @@ def save(filename, obj, message=None):
             json.dump(obj, fh)
 
 
+
+
 def pre_process(args):
     # Process training set and use it to decide on the word/character vocabularies
     word_counter, char_counter = Counter(), Counter()
     train_examples, train_eval = process_file(args.train_file, "train", word_counter, char_counter)
+
+    vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt"
     word_emb_mat, word2idx_dict = get_embedding(
-        word_counter, 'word', emb_file=args.glove_file, vec_size=args.glove_dim, num_vectors=args.glove_num_vecs)
+        word_counter, 'word', emb_file=vocab_url, vec_size=1, num_vectors=1)
+
     char_emb_mat, char2idx_dict = get_embedding(
         char_counter, 'char', emb_file=None, vec_size=args.char_dim)
 
@@ -382,9 +398,6 @@ if __name__ == '__main__':
     # Get command-line args
     args_ = get_setup_args()
 
-    # Download resources
-    download(args_)
-
     # Import spacy language model
     nlp = spacy.blank("en")
 
@@ -393,7 +406,4 @@ if __name__ == '__main__':
     args_.dev_file = url_to_data_path(args_.dev_url)
     if args_.include_test_examples:
         args_.test_file = url_to_data_path(args_.test_url)
-    glove_dir = url_to_data_path(args_.glove_url.replace('.zip', ''))
-    glove_ext = '.txt' if glove_dir.endswith('d') else '.{}d.txt'.format(args_.glove_dim)
-    args_.glove_file = os.path.join(glove_dir, os.path.basename(glove_dir) + glove_ext)
     pre_process(args_)
