@@ -40,14 +40,6 @@ def get_setup_args():
     parser.add_argument('--answer_file',
                         type=str,
                         default='./data/answer.json')
-    parser.add_argument('--para_limit',
-                        type=int,
-                        default=128,
-                        help='Max number of words in a paragraph')
-    parser.add_argument('--ques_limit',
-                        type=int,
-                        default=56,
-                        help='Max number of words to keep from a question')
     parser.add_argument('--test_para_limit',
                         type=int,
                         default=1000,
@@ -135,6 +127,7 @@ def get_train_args():
                         default=0.999,
                         help='Decay rate for exponential moving average of parameters.')
 
+
     args = parser.parse_args()
 
     if args.metric_name == 'NLL':
@@ -201,6 +194,14 @@ def add_common_args(parser):
     parser.add_argument('--test_eval_file',
                         type=str,
                         default='./data/test_eval_bert.json')
+    parser.add_argument('--para_limit',
+                        type=int,
+                        default=128,
+                        help='Max number of words in a paragraph')
+    parser.add_argument('--ques_limit',
+                        type=int,
+                        default=56,
+                        help='Max number of words to keep from a question')
 
 
 def add_train_test_args(parser):
