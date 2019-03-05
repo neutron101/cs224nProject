@@ -37,6 +37,7 @@ class Berty(BertPreTrainedModel):
         self.CLS_idx = [vocabulary['[CLS]']]
         self.SEP_idx = [vocabulary['[SEP]']]
         self.word_emb_size = word_emb_size
+        self.max_seq_length = max_seq_length
 
 
     def forward(self, cw_idxs, qw_idxs, c_mask, q_mask):
@@ -53,7 +54,7 @@ class Berty(BertPreTrainedModel):
 
         CLS_idx = torch.tensor(self.CLS_idx, device=cw_idxs.device)
         SEP_idx = torch.tensor(self.SEP_idx, device=cw_idxs.device)
-        max_seq_length = cw_idxs.size()[1] + qw_idxs.size()[1] + 1
+        max_seq_length = self.max_seq_length  #cw_idxs.size()[1] + qw_idxs.size()[1] + 1
 
         attention_masks = []
         input_words = []
@@ -179,7 +180,9 @@ class Embedding(nn.Module):
         super(Embedding, self).__init__()
 
         self.embed = Berty.from_pretrained('bert-base-uncased', \
-            cache_dir=os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(1)), word_emb_size=word_emb_size, vocabulary=vocabulary)
+            cache_dir=os.path.join(PYTORCH_PRETRAINED_BERT_CACHE, 'distributed_{}'.format(1)), \
+            word_emb_size=word_emb_size, vocabulary=vocabulary,
+            max_seq_length=max_seq_length)
         
         self.cemb = CNN(char_embeddings=char_vectors, filters=cnn_features)
         self.drop_prob = drop_prob
