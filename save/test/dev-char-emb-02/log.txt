@@ -1,0 +1,27 @@
+[03.05.19 05:08:48] Args: {
+    "batch_size": 64,
+    "char_emb_file": "./data/char_emb.json",
+    "cnn_features": 100,
+    "dev_eval_file": "./data/dev_eval.json",
+    "dev_record_file": "./data/dev.npz",
+    "hidden_size": 100,
+    "load_path": "save/train/char-emb-01/step_2401530.pth.tar",
+    "max_ans_len": 15,
+    "name": "dev-char-emb",
+    "num_visuals": 10,
+    "num_workers": 4,
+    "save_dir": "./save/test/dev-char-emb-02",
+    "split": "dev",
+    "sub_file": "submission.csv",
+    "test_eval_file": "./data/test_eval.json",
+    "test_record_file": "./data/test.npz",
+    "train_eval_file": "./data/train_eval.json",
+    "train_record_file": "./data/train.npz",
+    "use_squad_v2": true,
+    "word_emb_file": "./data/word_emb.json"
+}
+[03.05.19 05:08:48] Loading embeddings...
+[03.05.19 05:08:52] Building model...
+[03.05.19 05:08:54] Loading checkpoint from save/train/char-emb-01/step_2401530.pth.tar...
+[03.05.19 05:08:55] Building dataset...
+[03.05.19 05:08:58] Evaluating on dev split...
