@@ -56,6 +56,8 @@ class Berty(BertPreTrainedModel):
         SEP_idx = torch.tensor(self.SEP_idx, device=cw_idxs.device)
         max_seq_length = self.max_seq_length  #cw_idxs.size()[1] + qw_idxs.size()[1] + 1
 
+        # print('max_seq_length', max_seq_length)
+        
         attention_masks = []
         input_words = []
         segments = []
@@ -105,13 +107,16 @@ class Berty(BertPreTrainedModel):
 
             qs = torch.zeros((qlength, self.word_emb_size), device=cw_idxs.device)
             qlen = q_mask[s].sum()
-            qs[1:qlen,:] = sen[1:qlen,:]
-            qs[0,:]=1
+            qs[1:qlen,:] = sen[1:qlen,:]     
 
             cs = torch.zeros((clength, self.word_emb_size), device=cw_idxs.device)
             clen = c_mask[s].sum()
             cs[1:clen,:] = sen[qlen+1:qlen+clen,:]
-            cs[0,:]=1
+
+            # print('qmask', sen[0:attention_masks[s].sum(),:], attention_masks[s].sum(), 1, qlen, 'cmask', qlen+1, qlen+clen, clen)
+            # print('qs', qs)
+            # print('cs', cs)
+            # input('enter ........')
         
             cws.append(cs)
             qws.append(qs)
