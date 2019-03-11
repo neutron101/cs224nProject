@@ -7,68 +7,52 @@ Author:
 import layers
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
-class BiDAF(nn.Module):
-    """Baseline BiDAF model for SQuAD.
+class QANet(nn.Module):
 
-    Based on the paper:
-    "Bidirectional Attention Flow for Machine Comprehension"
-    by Minjoon Seo, Aniruddha Kembhavi, Ali Farhadi, Hannaneh Hajishirzi
-    (https://arxiv.org/abs/1611.01603).
+    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1):
+        super(QANet, self).__init__()
 
-    Follows a high-level structure commonly found in SQuAD models:
-        - Embedding layer: Embed word indices to get word vectors.
-        - Encoder layer: Encode the embedded sequence.
-        - Attention layer: Apply an attention mechanism to the encoded sequence.
-        - Model encoder layer: Encode the sequence again.
-        - Output layer: Simple layer (e.g., fc + softmax) to get final outputs.
+        self.drop_prob = drop_prob
+        self.embed = layers.QANetEmbedding(word_vectors, char_vectors, drop_prob)
+        
+        infeatures = word_vectors.size(-1) + char_vectors.size(-1)
+        self.emb_enc = layers.QANetEncoderLayer(infeatures=infeatures, hidden_size=hidden_size, conv_layers=4,\
+                                         blocks=1, kernel=7,  device=word_vectors.device)
 
-    Args:
-        word_vectors (torch.Tensor): Pre-trained word vectors.
-        hidden_size (int): Number of features in the hidden state at each layer.
-        drop_prob (float): Dropout probability.
-    """
-    def __init__(self, word_vectors, char_vectors, hidden_size, cnn_features=100, drop_prob=0.):
-        super(BiDAF, self).__init__()
-        self.emb = layers.Embedding(word_vectors=word_vectors,
-                                    char_vectors=char_vectors,
-                                    hidden_size=hidden_size,
-                                    drop_prob=drop_prob,
-                                    cnn_features=cnn_features)
-
-        self.enc = layers.RNNEncoder(input_size=hidden_size+cnn_features,
-                                     hidden_size=hidden_size,
-                                     num_layers=1,
-                                     drop_prob=drop_prob)
-
-        self.att = layers.BiDAFAttention(hidden_size=2 * hidden_size,
+        self.att = layers.BiDAFAttention(hidden_size=hidden_size,
                                          drop_prob=drop_prob)
 
-        self.mod = layers.RNNEncoder(input_size=8 * hidden_size,
-                                     hidden_size=hidden_size,
-                                     num_layers=2,
-                                     drop_prob=drop_prob)
+        self.model_enc = layers.QANetEncoderLayer(infeatures=4*hidden_size, hidden_size=hidden_size, conv_layers=2, \
+                                        blocks=7, kernel=5, device=word_vectors.device)
 
-        self.out = layers.BiDAFOutput(hidden_size=hidden_size,
-                                      drop_prob=drop_prob)
+        self.out = layers.QANetOutputLayer(hidden_size=hidden_size)
 
     def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
-        c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
 
-        c_emb = self.emb(cw_idxs, cc_idxs)         # (batch_size, c_len, hidden_size)
-        q_emb = self.emb(qw_idxs, qc_idxs)         # (batch_size, q_len, hidden_size)
+        cemb = self.embed(cw_idxs, cc_idxs) #(batch_size, c_len, p1+p2=500)
+        qemb = self.embed(qw_idxs, qc_idxs) #(batch_size, q_len, p1+p2=500)
 
-        c_enc = self.enc(c_emb, c_len)    # (batch_size, c_len, 2 * hidden_size)
-        q_enc = self.enc(q_emb, q_len)    # (batch_size, q_len, 2 * hidden_size)
+        cemb = self.emb_enc(cemb, c_mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
+        qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
+        cemb = F.dropout(cemb, self.drop_prob, self.training)
+        qemb = F.dropout(qemb, self.drop_prob, self.training)
 
-        att = self.att(c_enc, q_enc,
-                       c_mask, q_mask)    # (batch_size, c_len, 8 * hidden_size)
+        att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
+        att = F.dropout(att, self.drop_prob, self.training)
 
-        mod = self.mod(att, c_len)        # (batch_size, c_len, 2 * hidden_size)
-
-        out = self.out(att, mod, c_mask)  # 2 tensors, each (batch_size, c_len)
+        mask = torch.ones_like(c_mask, dtype=torch.int32)
+        model0 = self.model_enc(att, mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
+        model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)
+        model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
+        model0 = F.dropout(model0, self.drop_prob, self.training)
+        model1 = F.dropout(model1, self.drop_prob, self.training)
+        model2 = F.dropout(model2, self.drop_prob, self.training)
+        
+        out = self.out(model0, model1, model2, c_mask) #(batch_size, c_len)
 
         return out
