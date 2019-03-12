@@ -80,6 +80,7 @@ class QANetAttBlock(nn.Module):
         self.W_v = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
 
         self.W_out = nn.Linear(heads*dk, hidden_size, False)
+        self.sfmax = nn.Softmax(dim=1)
     
     def forward(self, x, mask):
 
@@ -113,7 +114,7 @@ class QANetAttBlock(nn.Module):
         res = torch.div(res, dk)
         print('\t\t\t\t div', T()-st)
         st = T()
-        res = masked_softmax(res, nmask, dim=1)
+        res = self.masked_softmax(res, nmask)
         print('\t\t\t\t SM', T()-st)
         st = T()
         attn = torch.matmul(res, V) 
@@ -123,7 +124,11 @@ class QANetAttBlock(nn.Module):
         return attn
 
 
-
+    def masked_softmax(self, logits, mask):
+        mask = mask.type(torch.float32)
+        masked_logits = mask * logits + (1 - mask) * -1e30
+        probs = self.sfmax(masked_logits)
+        return probs
 
 class QANetEncoderBlock(nn.Module):
 
