@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 class QANet(nn.Module):
 
-    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1):
+    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, device=None):
         super(QANet, self).__init__()
 
         self.drop_prob = drop_prob
@@ -20,13 +20,13 @@ class QANet(nn.Module):
         
         infeatures = word_vectors.size(-1) + char_vectors.size(-1)
         self.emb_enc = layers.QANetEncoderLayer(infeatures=infeatures, hidden_size=hidden_size, conv_layers=4,\
-                                         blocks=1, kernel=7,  device=word_vectors.device)
+                                         blocks=1, kernel=7,  device=device)
 
         self.att = layers.BiDAFAttention(hidden_size=hidden_size,
                                          drop_prob=drop_prob)
 
         self.model_enc = layers.QANetEncoderLayer(infeatures=4*hidden_size, hidden_size=hidden_size, conv_layers=2, \
-                                        blocks=7, kernel=5, device=word_vectors.device)
+                                        blocks=7, kernel=5, device=device)
 
         self.out = layers.QANetOutputLayer(hidden_size=hidden_size)
 

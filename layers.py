@@ -23,7 +23,6 @@ class QANetEncoderLayer(nn.Module):
                             conv_layers=conv_layers, kernel=kernel) for _ in range(blocks)])
 
         self.pos_emb = {}
-        self.device = device
 
         self.dim_mapper = nn.Conv1d(infeatures, hidden_size, kernel, padding=kernel//2)
 
@@ -37,7 +36,7 @@ class QANetEncoderLayer(nn.Module):
 
             dim = emb.size(1)
             if dim not in self.pos_emb:
-                self.pos_emb[str(dim)] = self.cal_pos_emb(dim, emb.size(2))
+                self.pos_emb[str(dim)] = self.cal_pos_emb(dim, emb.size(2), emb.device)
             emb = self.pos_emb[str(dim)] + emb
 
         # Move blocks forward
@@ -47,13 +46,13 @@ class QANetEncoderLayer(nn.Module):
         return emb
 
 
-    def cal_pos_emb(self, pos, hidden_size):
+    def cal_pos_emb(self, pos, hidden_size, device):
 
         if hidden_size < 2:
             print('Hidden size must be atleast 2')
             exit()
 
-        pos_emb = torch.zeros((pos, hidden_size), device=self.device)
+        pos_emb = torch.zeros((pos, hidden_size), device=device)
         it = hidden_size - (hidden_size%2)
         for p in range(pos):
             for h in range(0, it, 2):
@@ -80,7 +79,7 @@ class QANetAttBlock(nn.Module):
         self.W_out = nn.Linear(heads*dk, hidden_size, False)
     
     def forward(self, x, mask):
-        
+
         h = []
         for W_q, W_k, W_v in zip(self.W_q, self.W_k, self.W_v):
             h.append(self.attn(W_q(x), W_k(x), W_v(x), mask))
@@ -92,6 +91,7 @@ class QANetAttBlock(nn.Module):
     def attn(self, Q, K, V, mask):
 
         nsum = mask.sum(-1)
+        
         nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
         for i in range(nmask.size(0)):
             nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
@@ -157,14 +157,14 @@ class DepthSepConv(nn.Module):
 
 class ResBlock(nn.Module):
     """docstring for ResBlock"""
-    def __init__(self, module):
+    def __init__(self, module, hidden_size=128):
         super(ResBlock, self).__init__()
         self.module = module
+        self.norm = nn.LayerNorm(hidden_size)
 
     def forward(self, x, *args):
 
-        norm = nn.LayerNorm(x.size(-1))
-        xt = norm(x)
+        xt = self.norm(x)
         xt = self.module(xt, *args)
         
         if xt.size()[2] < x.size()[2]:
@@ -269,7 +269,7 @@ class QANetEmbedding(nn.Module):
         self.hwy = HighwayEncoder(2, word_vectors.size(1)+char_vectors.size(1))
 
         self.unk_indx = 1
-        self.unk_emb_idx = torch.tensor([0], device=word_vectors.device)
+        #self.unk_emb_idx = torch.tensor([0], device=word_vectors.device)
 
     def forward(self, x, c):
         # get charCNN embeddings
@@ -291,7 +291,7 @@ class QANetEmbedding(nn.Module):
     def get_emb(self, x):
 
         emb = self.embed(x) 
-        unk_emb = self.embed_unk(self.unk_emb_idx)
+        unk_emb = self.embed_unk(torch.tensor([0], device=x.device))
         
         mask = x.eq(self.unk_indx)
         mask = mask.type(torch.float32)

@@ -50,7 +50,8 @@ def main(args):
     model = QANet(word_vectors=word_vectors,
                   char_vectors=char_vectors,
                   hidden_size=args.hidden_size,
-                  drop_prob=args.drop_prob)
+                  drop_prob=args.drop_prob,
+                  device=device)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info('Loading checkpoint from {}...'.format(args.load_path))
