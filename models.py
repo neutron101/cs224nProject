@@ -9,6 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from time import time as T
+
 
 class QANet(nn.Module):
 
@@ -34,25 +36,35 @@ class QANet(nn.Module):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
 
+        st = T()
         cemb = self.embed(cw_idxs, cc_idxs) #(batch_size, c_len, p1+p2=500)
         qemb = self.embed(qw_idxs, qc_idxs) #(batch_size, q_len, p1+p2=500)
+        print('Emb', T()-st)
 
+        st = T()
         cemb = self.emb_enc(cemb, c_mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
         qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
         cemb = F.dropout(cemb, self.drop_prob, self.training)
         qemb = F.dropout(qemb, self.drop_prob, self.training)
+        print('Emb Enc', T()-st)        
 
+        st = T()
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
+        print('Att', T()-st)
         att = F.dropout(att, self.drop_prob, self.training)
 
         mask = torch.ones_like(c_mask, dtype=torch.int32)
+        st = T()
         model0 = self.model_enc(att, mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
         model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
+        print('Model Enc', T()-st)
         model0 = F.dropout(model0, self.drop_prob, self.training)
         model1 = F.dropout(model1, self.drop_prob, self.training)
         model2 = F.dropout(model2, self.drop_prob, self.training)
         
+        st = T()
         out = self.out(model0, model1, model2, c_mask) #(batch_size, c_len)
+        print('Out', T()-st)
 
         return out
