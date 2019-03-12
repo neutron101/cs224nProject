@@ -19,6 +19,31 @@ import ujson as json
 from collections import Counter
 
 
+class PosEmb(object):
+    """docstring for pos_emb"""
+    def __init__(self, max, hidden_size, device):
+        super(PosEmb, self).__init__()
+        self.emb = self.cal_pos_emb(max, hidden_size, device)
+        print('Pos Emb on ', self.emb.device)
+
+    def cal_pos_emb(self, pos, hidden_size, device):
+
+        if hidden_size < 2:
+            print('Hidden size must be atleast 2')
+            exit()
+
+        pos_emb = torch.zeros((pos, hidden_size), device=device)
+        it = hidden_size - (hidden_size%2)
+        for p in range(pos):
+            for h in range(0, it, 2):
+                pos_emb[p,h] = np.sin(pos/np.power(10000, h/hidden_size))
+                pos_emb[p,h+1] = np.cos(pos/np.power(10000, h/hidden_size))
+
+            if hidden_size%2 != 0:
+                pos_emb[p,it] = np.sin(pos/np.power(10000, it/hidden_size))
+
+        return pos_emb
+        
 class SQuAD(data.Dataset):
     """Stanford Question Answering Dataset (SQuAD).
 

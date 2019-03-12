@@ -49,8 +49,9 @@ def main(args):
     log.info('Building QANet model...')
     model = QANet(word_vectors=word_vectors,
                   char_vectors=char_vectors,
-                  hidden_size=64, #args.hidden_size,
                   drop_prob=args.drop_prob,
+                  device=device,
+                  hidden_size=64, #args.hidden_size,
                   b1=1, b2=2, heads=2)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:

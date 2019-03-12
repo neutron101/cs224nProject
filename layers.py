@@ -11,17 +11,16 @@ import torch.nn.functional as F
 from util import masked_softmax
 import numpy as np
 from time import time as T
-
-
+        
 class QANetEncoderLayer(nn.Module):
 
-    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size):
+    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(infeatures=hidden_size, hidden_size=hidden_size, \
                             conv_layers=conv_layers, kernel=kernel, heads=heads) for _ in range(blocks)])
 
-        self.pos_emb = {}
+        self.pos_emb = pos_emb
 
         self.dim_mapper = nn.Conv1d(infeatures, hidden_size, kernel, padding=kernel//2)
 
@@ -34,10 +33,7 @@ class QANetEncoderLayer(nn.Module):
             emb = self.dim_mapper(emb)
             emb = emb.permute(0,2,1)
 
-            dim = emb.size(1)
-            if dim not in self.pos_emb:
-                self.pos_emb[str(dim)] = self.cal_pos_emb(dim, emb.size(2), emb.device)
-            emb = self.pos_emb[str(dim)] + emb
+            emb = emb + self.pos_emb.emb[0:emb.size(1),:]
             print('\tPos Emb', T()-st)
 
         # Move blocks forward
@@ -49,24 +45,7 @@ class QANetEncoderLayer(nn.Module):
         return emb
 
 
-    def cal_pos_emb(self, pos, hidden_size, device):
-
-        if hidden_size < 2:
-            print('Hidden size must be atleast 2')
-            exit()
-
-        pos_emb = torch.zeros((pos, hidden_size), device=device)
-        it = hidden_size - (hidden_size%2)
-        for p in range(pos):
-            for h in range(0, it, 2):
-                pos_emb[p,h] = np.sin(pos/np.power(10000, h/hidden_size))
-                pos_emb[p,h+1] = np.cos(pos/np.power(10000, h/hidden_size))
-
-            if hidden_size%2 != 0:
-                pos_emb[p,it] = np.sin(pos/np.power(10000, it/hidden_size))
-
-        return pos_emb
-
+    
 
 class QANetAttBlock(nn.Module):
     """docstring for QANetAttBlock"""

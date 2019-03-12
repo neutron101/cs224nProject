@@ -10,25 +10,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from time import time as T
+from util import PosEmb
 
 
 class QANet(nn.Module):
 
-    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, b1=1, b2=7, heads=8):
+    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, b1=1, b2=7, heads=8, device=None):
         super(QANet, self).__init__()
 
         self.drop_prob = drop_prob
+        pos_emb = PosEmb(400, hidden_size, device)
         self.embed = layers.QANetEmbedding(word_vectors, char_vectors, drop_prob)
         
         infeatures = word_vectors.size(-1) + char_vectors.size(-1)
         self.emb_enc = layers.QANetEncoderLayer(infeatures=infeatures, hidden_size=hidden_size, conv_layers=4,\
-                                         blocks=b1, kernel=7, heads=heads)
+                                         blocks=b1, kernel=7, heads=heads, pos_emb=pos_emb)
 
         self.att = layers.BiDAFAttention(hidden_size=hidden_size,
                                          drop_prob=drop_prob)
 
         self.model_enc = layers.QANetEncoderLayer(infeatures=4*hidden_size, hidden_size=hidden_size, conv_layers=2, \
-                                        blocks=b2, kernel=5, heads=heads)
+                                        blocks=b2, kernel=5, heads=heads, pos_emb=pos_emb)
 
         self.out = layers.QANetOutputLayer(hidden_size=hidden_size)
 
