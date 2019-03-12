@@ -37,7 +37,8 @@ class QANetEncoderLayer(nn.Module):
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
 
-            emb = emb + self.pos_emb.emb[0:emb.size(1),:]
+            p_emb = self.pos_emb.emb[0:emb.size(1),:].to(emb.device)
+            emb = emb + p_emb
             mypr('\tPos Emb', T()-st)
 
         # Move blocks forward

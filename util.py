@@ -26,17 +26,17 @@ def mypr(*string):
 
 class PosEmb(object):
     """docstring for pos_emb"""
-    def __init__(self, max, hidden_size, device):
+    def __init__(self, max, hidden_size):
         super(PosEmb, self).__init__()
-        self.emb = self.cal_pos_emb(max, hidden_size, device)
+        self.emb = self.cal_pos_emb(max, hidden_size)
 
-    def cal_pos_emb(self, pos, hidden_size, device):
+    def cal_pos_emb(self, pos, hidden_size):
 
         if hidden_size < 2:
             print('Hidden size must be atleast 2')
             exit()
 
-        pos_emb = torch.zeros((pos, hidden_size), device=device)
+        pos_emb = torch.zeros((pos, hidden_size))
         it = hidden_size - (hidden_size%2)
         for p in range(pos):
             for h in range(0, it, 2):
