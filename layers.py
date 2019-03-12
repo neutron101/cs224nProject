@@ -11,6 +11,7 @@ import torch.nn.functional as F
 from util import masked_softmax
 import numpy as np
 from time import time as T
+from util import mypr
         
 class QANetEncoderLayer(nn.Module):
 
@@ -34,13 +35,13 @@ class QANetEncoderLayer(nn.Module):
             emb = emb.permute(0,2,1)
 
             emb = emb + self.pos_emb.emb[0:emb.size(1),:]
-            print('\tPos Emb', T()-st)
+            mypr('\tPos Emb', T()-st)
 
         # Move blocks forward
         for b in self.blocks:
             st = T()
             emb = b(emb, mask)
-            print('\tOne Enc Block', T()-st)
+            mypr('\tOne Enc Block', T()-st)
 
         return emb
 
@@ -79,26 +80,26 @@ class QANetAttBlock(nn.Module):
         nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
         for i in range(nmask.size(0)):
             nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
-        print('\t\t\tmask', T()-st)
+        mypr('\t\t\tmask', T()-st)
 
         stm = T()
         st = T()
         dk = torch.sqrt(nsum.type(torch.float32))
-        print('\t\t\t\t sqrt', T()-st)
+        mypr('\t\t\t\t sqrt', T()-st)
         dk = dk.view(dk.size()[0], 1, 1)
         st = T()
         res = torch.matmul(Q, torch.transpose(K,1,2))
-        print('\t\t\t\t matmul', T()-st)
+        mypr('\t\t\t\t matmul', T()-st)
         st = T()
         res = torch.div(res, dk)
-        print('\t\t\t\t div', T()-st)
+        mypr('\t\t\t\t div', T()-st)
         st = T()
         res = self.masked_softmax(res, nmask)
-        print('\t\t\t\t SM', T()-st)
+        mypr('\t\t\t\t SM', T()-st)
         st = T()
         attn = torch.matmul(res, V) 
-        print('\t\t\t\t matmul', T()-st)
-        print('\t\t\t after mask', T()-stm, Q.device, K.device, V.device)
+        mypr('\t\t\t\t matmul', T()-st)
+        mypr('\t\t\t after mask', T()-stm, Q.device, K.device, V.device)
 
         return attn
 
@@ -129,16 +130,16 @@ class QANetEncoderBlock(nn.Module):
         for c in self.cnns:
             st = T()
             out = c(out)
-            print('\t\tEnc Block Conv', T()-st)
+            mypr('\t\tEnc Block Conv', T()-st)
 
 
         st = T()
         out = self.att(out, mask)
-        print('\t\tEnc Block Att', T()-st)
+        mypr('\t\tEnc Block Att', T()-st)
 
         st = T()
         out = self.feedforward(out)
-        print('\t\tEnc Block FF', T()-st)
+        mypr('\t\tEnc Block FF', T()-st)
         
         return out
 

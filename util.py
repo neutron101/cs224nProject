@@ -18,13 +18,17 @@ import ujson as json
 
 from collections import Counter
 
+print_flag = False
+
+def mypr(*string):
+    if print_flag:
+        print(string)
 
 class PosEmb(object):
     """docstring for pos_emb"""
     def __init__(self, max, hidden_size, device):
         super(PosEmb, self).__init__()
         self.emb = self.cal_pos_emb(max, hidden_size, device)
-        print('Pos Emb on ', self.emb.device)
 
     def cal_pos_emb(self, pos, hidden_size, device):
 
