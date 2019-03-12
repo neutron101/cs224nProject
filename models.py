@@ -20,7 +20,7 @@ class QANet(nn.Module):
         super(QANet, self).__init__()
 
         self.drop_prob = drop_prob
-        pos_emb = PosEmb(400, hidden_size, device)
+        pos_emb = PosEmb(450, hidden_size, device)
         self.embed = layers.QANetEmbedding(word_vectors, char_vectors, drop_prob)
         
         infeatures = word_vectors.size(-1) + char_vectors.size(-1)
