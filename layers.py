@@ -8,7 +8,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
 import numpy as np
 from time import time as T
@@ -16,12 +15,11 @@ from time import time as T
 
 class QANetEncoderLayer(nn.Module):
 
-    def __init__(self, infeatures, conv_layers, kernel, blocks=1, \
-                                             hidden_size=128, device=None):
+    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(infeatures=hidden_size, hidden_size=hidden_size, \
-                            conv_layers=conv_layers, kernel=kernel) for _ in range(blocks)])
+                            conv_layers=conv_layers, kernel=kernel, heads=heads) for _ in range(blocks)])
 
         self.pos_emb = {}
 
@@ -31,6 +29,7 @@ class QANetEncoderLayer(nn.Module):
 
         # Get positional embedding
         if use_pos_emb:
+            st = T()
             emb = emb.permute(0,2,1)
             emb = self.dim_mapper(emb)
             emb = emb.permute(0,2,1)
@@ -39,6 +38,7 @@ class QANetEncoderLayer(nn.Module):
             if dim not in self.pos_emb:
                 self.pos_emb[str(dim)] = self.cal_pos_emb(dim, emb.size(2), emb.device)
             emb = self.pos_emb[str(dim)] + emb
+            print('\tPos Emb', T()-st)
 
         # Move blocks forward
         for b in self.blocks:
@@ -70,7 +70,7 @@ class QANetEncoderLayer(nn.Module):
 
 class QANetAttBlock(nn.Module):
     """docstring for QANetAttBlock"""
-    def __init__(self, hidden_size, heads=8):
+    def __init__(self, hidden_size, heads):
         super(QANetAttBlock, self).__init__()
 
         dk = hidden_size//heads
@@ -132,16 +132,16 @@ class QANetAttBlock(nn.Module):
 
 class QANetEncoderBlock(nn.Module):
 
-    def __init__(self, infeatures, hidden_size, conv_layers, kernel):
+    def __init__(self, infeatures, hidden_size, conv_layers, kernel, heads):
         super(QANetEncoderBlock, self).__init__()
 
-        self.cnns = nn.ModuleList([ResBlock(DepthSepConv(infeatures, hidden_size, kernel))])
-        self.cnns.extend([ResBlock(DepthSepConv(hidden_size, hidden_size, kernel)) \
+        self.cnns = nn.ModuleList([ResBlock(DepthSepConv(infeatures, hidden_size, kernel), hidden_size)])
+        self.cnns.extend([ResBlock(DepthSepConv(hidden_size, hidden_size, kernel), hidden_size) \
                                          for _ in range(conv_layers-1)])
 
-        self.att = ResBlock(QANetAttBlock(hidden_size))
+        self.att = ResBlock(QANetAttBlock(hidden_size, heads=heads), hidden_size)
         
-        self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False))
+        self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
 
 
     def forward(self, x, mask):
@@ -189,7 +189,7 @@ class DepthSepConv(nn.Module):
 
 class ResBlock(nn.Module):
     """docstring for ResBlock"""
-    def __init__(self, module, hidden_size=128):
+    def __init__(self, module, hidden_size):
         super(ResBlock, self).__init__()
         self.module = module
         self.norm = nn.LayerNorm(hidden_size)
