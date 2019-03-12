@@ -65,7 +65,7 @@ class QANet(nn.Module):
         att = self.drop(att)
         mypr('Att dropout', T()-st)
 
-        mask = torch.ones_like(c_mask, dtype=torch.int32)
+        mask = c_mask #torch.ones_like(c_mask, dtype=torch.int32)
         st = T()
         model0 = self.model_enc(att, mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
         model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)

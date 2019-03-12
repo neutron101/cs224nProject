@@ -63,7 +63,7 @@ class QANetAttBlock(nn.Module):
         self.W_v = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
 
         self.W_out = nn.Linear(heads*dk, hidden_size, False)
-        self.sfmax = nn.Softmax(dim=1)
+        self.sfmax = nn.Softmax(dim=2)
     
     def forward(self, x, mask):
 
@@ -80,9 +80,10 @@ class QANetAttBlock(nn.Module):
         nsum = mask.sum(-1)
         
         st = T()
-        nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
-        for i in range(nmask.size(0)):
-            nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
+        nmask = mask.view(mask.size(0), 1, mask.size(1))
+        # nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
+        # for i in range(nmask.size(0)):
+        #     nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
         mypr('\t\t\tmask', T()-st)
 
         stm = T()
