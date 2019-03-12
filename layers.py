@@ -283,9 +283,7 @@ class QANetEmbedding(nn.Module):
     """
     def __init__(self, word_vectors, char_vectors, w_drop_prob=0.1, c_drop_prob=.05):
         super(QANetEmbedding, self).__init__()
-        self.w_drop_prob = w_drop_prob
-        self.c_drop_prob = c_drop_prob
-
+ 
         self.embed = nn.Embedding.from_pretrained(word_vectors)
         self.embed_unk = nn.Embedding(1, word_vectors.size(1))
         
@@ -296,16 +294,19 @@ class QANetEmbedding(nn.Module):
         self.hwy = HighwayEncoder(2, word_vectors.size(1)+char_vectors.size(1))
 
         self.unk_indx = 1
+
+        self.wdrop = nn.Dropout(w_drop_prob)
+        self.cdrop = nn.Dropout(c_drop_prob)
         #self.unk_emb_idx = torch.tensor([0], device=word_vectors.device)
 
     def forward(self, x, c):
         # get charCNN embeddings
         cemb = self.cemb(c)
-        cemb = F.dropout(cemb, self.c_drop_prob, self.training)
+        cemb = self.cdrop(cemb)
 
         # get word embeddings
         emb = self.get_emb(x) 
-        emb = F.dropout(emb, self.w_drop_prob, self.training)
+        emb = self.wdrop(emb)
         emb = self.proj(emb)
 
         # concatenate word and char embeddings
