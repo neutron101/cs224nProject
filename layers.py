@@ -30,9 +30,12 @@ class QANetEncoderLayer(nn.Module):
         # Get positional embedding
         if use_pos_emb:
             st = T()
+            sa = emb.size()
             emb = emb.permute(0,2,1)
             emb = self.dim_mapper(emb)
             emb = emb.permute(0,2,1)
+            sb = emb.size()
+            assert sa[0:2] == sb[0:2]
 
             emb = emb + self.pos_emb.emb[0:emb.size(1),:]
             mypr('\tPos Emb', T()-st)
@@ -282,7 +285,6 @@ class QANetEmbedding(nn.Module):
 
         self.wdrop = nn.Dropout(w_drop_prob)
         self.cdrop = nn.Dropout(c_drop_prob)
-        #self.unk_emb_idx = torch.tensor([0], device=word_vectors.device)
 
     def forward(self, x, c):
         # get charCNN embeddings
@@ -304,7 +306,7 @@ class QANetEmbedding(nn.Module):
     def get_emb(self, x):
 
         emb = self.embed(x) 
-        unk_emb = self.embed_unk(torch.tensor([0], device=x.device))
+        unk_emb = self.embed_unk(torch.tensor([[0]], dtype=torch.long, device=x.device))
         
         mask = x.eq(self.unk_indx)
         mask = mask.type(torch.float32)
