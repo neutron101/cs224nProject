@@ -51,7 +51,6 @@ class QANetEncoderLayer(nn.Module):
         for b in self.blocks:
             st = T()
             emb, depth = b(emb, mask, depth, self.total_runs)
-            mypr('\tOne Enc Block', T()-st)
 
         return emb
 
@@ -75,6 +74,7 @@ class QANetAttBlock(nn.Module):
     
     def forward(self, x, mask):
 
+        print(x[0])
         h = []
         for W_q, W_k, W_v in zip(self.W_q, self.W_k, self.W_v):
             h.append(self.attn(W_q(x), W_k(x), W_v(x), mask))
@@ -85,18 +85,15 @@ class QANetAttBlock(nn.Module):
 
     def attn(self, Q, K, V, mask):
         
-        st = T()
         nmask1 = mask.view(mask.size(0), 1, mask.size(1))
         nmask2 = nmask1.transpose(1,2)
-        # nsum = mask.sum(-1)
-        # nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
-        # for i in range(nmask.size(0)):
-        #     nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
 
         res = torch.matmul(Q, torch.transpose(K,1,2))
         res = torch.div(res, self.dkroot)
         res = self.masked_softmax(res, nmask1, nmask2)
         attn = torch.matmul(res, V) 
+        print('Res', attn[0])
+        exit()
 
         return attn
 
@@ -105,8 +102,8 @@ class QANetAttBlock(nn.Module):
         mask1 = mask1.type(torch.float32)
         mask2 = mask2.type(torch.float32)
         masked_logits = mask1 * logits + (1 - mask1) * -1e30
-        masked_logits = mask2 * masked_logits + (1 - mask2) * -1e30
         probs = self.sfmax(masked_logits)
+        probs = probs * mask2
         return probs
 
 class QANetEncoderBlock(nn.Module):
@@ -273,7 +270,7 @@ class QANetEmbedding(nn.Module):
 
         self.hwy = HighwayEncoder(2, word_vectors.size(1)+char_vectors.size(1))
 
-        self.unk_indx = 1
+        self.UNK = 1
 
         self.wdrop = nn.Dropout(w_drop_prob)
         self.cdrop = nn.Dropout(c_drop_prob)
@@ -302,7 +299,7 @@ class QANetEmbedding(nn.Module):
         emb = self.embed(x) 
         unk_emb = self.embed_unk(torch.tensor([[0]], dtype=torch.long, device=x.device))
         
-        mask = x.eq(self.unk_indx)
+        mask = x.eq(self.UNK)
         mask = mask.type(torch.float32)
         mask = mask.unsqueeze(2)
         emb = (1-mask)*emb + mask*unk_emb
