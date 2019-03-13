@@ -53,17 +53,14 @@ class QANet(nn.Module):
         qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
         mypr('Query Emb Enc', T()-st) 
 
-        st = T()
         cemb = self.drop(cemb)
         qemb = self.drop(qemb)
-        mypr('Emb Enc dropout', T()-st)
 
         st = T()
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
         mypr('Att', T()-st)
-        st = T()
+
         att = self.drop(att)
-        mypr('Att dropout', T()-st)
 
         st = T()
         mask = c_mask
@@ -72,11 +69,9 @@ class QANet(nn.Module):
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
         mypr('Model Enc', T()-st)
 
-        st = T()
         model0 = self.drop(model0)
         model1 = self.drop(model1)
         model2 = self.drop(model2)
-        mypr('Model Enc dropout', T()-st)
         
         st = T()
         out = self.out(model0, model1, model2, c_mask) #(batch_size, c_len)

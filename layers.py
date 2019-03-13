@@ -40,6 +40,7 @@ class QANetEncoderLayer(nn.Module):
             p_emb = self.pos_emb.emb[0:emb.size(1),:]
             p_emb = p_emb.unsqueeze(0)
             nmask = mask.unsqueeze(-1).type(torch.float32)
+            p_emb = p_emb.to(emb.device)
             p_emb = p_emb * nmask            
 
             p_emb = p_emb.to(emb.device)
