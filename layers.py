@@ -15,21 +15,21 @@ from util import mypr
         
 class QANetEncoderLayer(nn.Module):
 
-    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb):
+    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb, pL=.5):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(infeatures=hidden_size, hidden_size=hidden_size, \
-                            conv_layers=conv_layers, kernel=kernel, heads=heads) for _ in range(blocks)])
+                            conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL)) for _ in range(blocks)])
 
         self.pos_emb = pos_emb
 
         self.dim_mapper = nn.Conv1d(infeatures, hidden_size, kernel, padding=kernel//2)
+        self.total_runs = blocks*conv_layers
 
     def forward(self, emb, mask, use_pos_emb=False):
 
         # Get positional embedding
         if use_pos_emb:
-            st = T()
             sa = emb.size()
             emb = emb.permute(0,2,1)
             emb = self.dim_mapper(emb)
@@ -37,14 +37,19 @@ class QANetEncoderLayer(nn.Module):
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
 
-            p_emb = self.pos_emb.emb[0:emb.size(1),:].to(emb.device)
-            emb = emb + p_emb
-            mypr('\tPos Emb', T()-st)
+            p_emb = self.pos_emb.emb[0:emb.size(1),:]
+            p_emb = p_emb.unsqueeze(0)
+            nmask = mask.unsqueeze(-1).type(torch.float32)
+            p_emb = p_emb * nmask            
 
+            p_emb = p_emb.to(emb.device)
+            emb = emb + p_emb
+
+        depth = 0
         # Move blocks forward
         for b in self.blocks:
             st = T()
-            emb = b(emb, mask)
+            emb, depth = b(emb, mask, depth, self.total_runs)
             mypr('\tOne Enc Block', T()-st)
 
         return emb
@@ -65,6 +70,7 @@ class QANetAttBlock(nn.Module):
 
         self.W_out = nn.Linear(heads*dk, hidden_size, False)
         self.sfmax = nn.Softmax(dim=2)
+        self.dkroot = np.sqrt(dk)
     
     def forward(self, x, mask):
 
@@ -77,47 +83,34 @@ class QANetAttBlock(nn.Module):
 
 
     def attn(self, Q, K, V, mask):
-
-        nsum = mask.sum(-1)
         
         st = T()
-        nmask = mask.view(mask.size(0), 1, mask.size(1))
+        nmask1 = mask.view(mask.size(0), 1, mask.size(1))
+        nmask2 = nmask1.transpose(1,2)
+        # nsum = mask.sum(-1)
         # nmask = torch.zeros((Q.size(0), Q.size(1), Q.size(1)), device=mask.device)
         # for i in range(nmask.size(0)):
         #     nmask[i, 0:nsum[i], 0:nsum[i]] = 1.
-        mypr('\t\t\tmask', T()-st)
 
-        stm = T()
-        st = T()
-        dk = torch.sqrt(nsum.type(torch.float32))
-        mypr('\t\t\t\t sqrt', T()-st)
-        dk = dk.view(dk.size()[0], 1, 1)
-        st = T()
         res = torch.matmul(Q, torch.transpose(K,1,2))
-        mypr('\t\t\t\t matmul', T()-st)
-        st = T()
-        res = torch.div(res, dk)
-        mypr('\t\t\t\t div', T()-st)
-        st = T()
-        res = self.masked_softmax(res, nmask)
-        mypr('\t\t\t\t SM', T()-st)
-        st = T()
+        res = torch.div(res, self.dkroot)
+        res = self.masked_softmax(res, nmask1, nmask2)
         attn = torch.matmul(res, V) 
-        mypr('\t\t\t\t matmul', T()-st)
-        mypr('\t\t\t after mask', T()-stm, Q.device, K.device, V.device)
 
         return attn
 
 
-    def masked_softmax(self, logits, mask):
-        mask = mask.type(torch.float32)
-        masked_logits = mask * logits + (1 - mask) * -1e30
+    def masked_softmax(self, logits, mask1, mask2):
+        mask1 = mask1.type(torch.float32)
+        mask2 = mask2.type(torch.float32)
+        masked_logits = mask1 * logits + (1 - mask1) * -1e30
+        masked_logits = mask2 * masked_logits + (1 - mask2) * -1e30
         probs = self.sfmax(masked_logits)
         return probs
 
 class QANetEncoderBlock(nn.Module):
 
-    def __init__(self, infeatures, hidden_size, conv_layers, kernel, heads):
+    def __init__(self, infeatures, hidden_size, conv_layers, kernel, heads, pL):
         super(QANetEncoderBlock, self).__init__()
 
         self.cnns = nn.ModuleList([ResBlock(DepthSepConv(infeatures, hidden_size, kernel), hidden_size)])
@@ -127,26 +120,22 @@ class QANetEncoderBlock(nn.Module):
         self.att = ResBlock(QANetAttBlock(hidden_size, heads=heads), hidden_size)
         
         self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
+        self.pL = pL
 
 
-    def forward(self, x, mask):
+    def forward(self, x, mask, depth, total_runs):
 
         out = x
         for c in self.cnns:
-            st = T()
-            out = c(out)
-            mypr('\t\tEnc Block Conv', T()-st)
+            depth+=1
+            survival = (1-(depth/total_runs)*(self.pL))
+            if torch.rand(1) <= survival:
+                out = c(out)
 
-
-        st = T()
         out = self.att(out, mask)
-        mypr('\t\tEnc Block Att', T()-st)
-
-        st = T()
         out = self.feedforward(out)
-        mypr('\t\tEnc Block FF', T()-st)
         
-        return out
+        return out, depth
 
 
 class DepthSepConv(nn.Module):
@@ -174,21 +163,21 @@ class DepthSepConv(nn.Module):
 
 class ResBlock(nn.Module):
     """docstring for ResBlock"""
-    def __init__(self, module, hidden_size):
+    def __init__(self, module, hidden_size, layer_dropout=.9):
         super(ResBlock, self).__init__()
         self.module = module
         self.norm = nn.LayerNorm(hidden_size)
+        self.layer_dropout = layer_dropout
 
     def forward(self, x, *args):
 
-        xt = self.norm(x)
-        xt = self.module(xt, *args)
-        
-        if xt.size()[2] < x.size()[2]:
-            result = x[:,:,0:xt.size()[2]] + xt
-        else:
-            result = x + xt
-
+        result = x
+        if torch.rand(1) <= self.layer_dropout:
+            xt = self.norm(x)
+            xt = self.module(xt, *args)
+            xt = torch.div(xt, self.layer_dropout)
+            result = result + xt
+            
         return result
 
 
