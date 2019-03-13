@@ -288,7 +288,6 @@ class QANetEmbedding(nn.Module):
         emb = self.wdrop(emb)
         emb = self.proj(emb)
 
-        print('emb size {}{} csize {}{}'.format(x.size(), emb.size(), c.size(), cemb.size()))
         assert cemb.size()[0:2] == emb.size()[0:2], 'emb size {}{} csize {}{}'.format(x.size(), emb.size(), c.size(), cemb.size())
 
         # concatenate word and char embeddings
