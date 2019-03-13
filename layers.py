@@ -74,7 +74,6 @@ class QANetAttBlock(nn.Module):
     
     def forward(self, x, mask):
 
-        print(x[0])
         h = []
         for W_q, W_k, W_v in zip(self.W_q, self.W_k, self.W_v):
             h.append(self.attn(W_q(x), W_k(x), W_v(x), mask))
@@ -92,8 +91,6 @@ class QANetAttBlock(nn.Module):
         res = torch.div(res, self.dkroot)
         res = self.masked_softmax(res, nmask1, nmask2)
         attn = torch.matmul(res, V) 
-        print('Res', attn[0])
-        exit()
 
         return attn
 
