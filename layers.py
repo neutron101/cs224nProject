@@ -15,7 +15,7 @@ from util import mypr
         
 class QANetEncoderLayer(nn.Module):
 
-    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb, pL=.5):
+    def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb, pL=.9, dropout=.1):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(hidden_size=hidden_size, \
@@ -25,6 +25,7 @@ class QANetEncoderLayer(nn.Module):
 
         self.dim_mapper = Conv(infeatures, hidden_size, kernel)
         self.total_runs = blocks*conv_layers
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, emb, mask, use_pos_emb=False):
 
@@ -48,6 +49,7 @@ class QANetEncoderLayer(nn.Module):
         # Move blocks forward
         for b in self.blocks:
             emb, depth = b(emb, mask, depth, self.total_runs)
+            emb = self.dropout(emb)
 
         return emb
 
@@ -143,7 +145,7 @@ class Conv(nn.Module):
 
     def forward(self, x, mask):
         nmask = mask.unsqueeze(2).type(torch.float32)
-        x = nmask * x
+        # x = nmask * x
         
         out = x.permute(0,2,1)
 

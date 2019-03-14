@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from time import time as T
 from util import PosEmb
 from util import mypr
+from layers import Conv
 
 
 class QANet(nn.Module):
@@ -37,6 +38,8 @@ class QANet(nn.Module):
 
         self.drop = nn.Dropout(self.drop_prob)
 
+        self.reduc = Conv(4*hidden_size, hidden_size, 5)
+
     def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
@@ -53,9 +56,6 @@ class QANet(nn.Module):
         qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
         mypr('Query Emb Enc', T()-st) 
 
-        cemb = self.drop(cemb)
-        qemb = self.drop(qemb)
-
         st = T()
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
         mypr('Att', T()-st)
@@ -69,12 +69,18 @@ class QANet(nn.Module):
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
         mypr('Model Enc', T()-st)
 
-        model0 = self.drop(model0)
-        model1 = self.drop(model1)
-        model2 = self.drop(model2)
+        
+        # model1 = self.conv(att, c_mask)
+        # model2 = self.conv(att, c_mask)
+        # model0 = torch.zeros_like(model1)
+
         
         st = T()
-        out = self.out(model0, model1, model2, c_mask) #(batch_size, c_len)
+        out = self.out(model0, model1, model2, c_mask) #(p1, p2)
         mypr('Out', T()-st)
 
         return out
+
+    def conv(self, x, mask):
+        return self.reduc(x, mask)
+
