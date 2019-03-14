@@ -18,12 +18,12 @@ class QANetEncoderLayer(nn.Module):
     def __init__(self, infeatures, conv_layers, kernel, heads, blocks, hidden_size, pos_emb, pL=.5):
         super(QANetEncoderLayer, self).__init__()
 
-        self.blocks = nn.ModuleList([QANetEncoderBlock(infeatures=hidden_size, hidden_size=hidden_size, \
+        self.blocks = nn.ModuleList([QANetEncoderBlock(hidden_size=hidden_size, \
                             conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL)) for _ in range(blocks)])
 
         self.pos_emb = pos_emb
 
-        self.dim_mapper = nn.Conv1d(infeatures, hidden_size, kernel, padding=kernel//2)
+        self.dim_mapper = Conv(infeatures, hidden_size, kernel)
         self.total_runs = blocks*conv_layers
 
     def forward(self, emb, mask, use_pos_emb=False):
@@ -31,9 +31,7 @@ class QANetEncoderLayer(nn.Module):
         # Get positional embedding
         if use_pos_emb:
             sa = emb.size()
-            emb = emb.permute(0,2,1)
-            emb = self.dim_mapper(emb)
-            emb = emb.permute(0,2,1)
+            emb = self.dim_mapper(emb, mask)
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
 
@@ -49,7 +47,6 @@ class QANetEncoderLayer(nn.Module):
         depth = 0
         # Move blocks forward
         for b in self.blocks:
-            st = T()
             emb, depth = b(emb, mask, depth, self.total_runs)
 
         return emb
@@ -84,33 +81,31 @@ class QANetAttBlock(nn.Module):
 
     def attn(self, Q, K, V, mask):
         
-        nmask1 = mask.view(mask.size(0), 1, mask.size(1))
-        nmask2 = nmask1.transpose(1,2)
+        nmask = mask.unsqueeze(1).expand(-1, 1, -1)
 
         res = torch.matmul(Q, torch.transpose(K,1,2))
         res = torch.div(res, self.dkroot)
-        res = self.masked_softmax(res, nmask1, nmask2)
+        res = self.masked_softmax(res, nmask)
         attn = torch.matmul(res, V) 
 
         return attn
 
 
-    def masked_softmax(self, logits, mask1, mask2):
-        mask1 = mask1.type(torch.float32)
-        mask2 = mask2.type(torch.float32)
-        masked_logits = mask1 * logits + (1 - mask1) * -1e30
+    def masked_softmax(self, logits, mask):
+        mask = mask.type(torch.float32)
+        masked_logits = mask * logits + (1 - mask) * -1e30
         probs = self.sfmax(masked_logits)
-        probs = probs * mask2
+        mask = mask.transpose(1,2)
+        probs = probs * mask
         return probs
 
 class QANetEncoderBlock(nn.Module):
 
-    def __init__(self, infeatures, hidden_size, conv_layers, kernel, heads, pL):
+    def __init__(self, hidden_size, conv_layers, kernel, heads, pL):
         super(QANetEncoderBlock, self).__init__()
 
-        self.cnns = nn.ModuleList([ResBlock(DepthSepConv(infeatures, hidden_size, kernel), hidden_size)])
-        self.cnns.extend([ResBlock(DepthSepConv(hidden_size, hidden_size, kernel), hidden_size) \
-                                         for _ in range(conv_layers-1)])
+        self.cnns = nn.ModuleList([ResBlock(Conv(hidden_size, hidden_size, kernel, depth=True), hidden_size) \
+                                         for _ in range(conv_layers)])
 
         self.att = ResBlock(QANetAttBlock(hidden_size, heads=heads), hidden_size)
         
@@ -125,7 +120,7 @@ class QANetEncoderBlock(nn.Module):
             depth+=1
             survival = (1-(depth/total_runs)*(self.pL))
             if torch.rand(1) <= survival:
-                out = c(out)
+                out = c(out, mask)
 
         out = self.att(out, mask)
         out = self.feedforward(out)
@@ -133,25 +128,33 @@ class QANetEncoderBlock(nn.Module):
         return out, depth
 
 
-class DepthSepConv(nn.Module):
+class Conv(nn.Module):
     """docstring for DepthSepConv"""
-    def __init__(self, in_features, hidden_size, kernel):
-        super(DepthSepConv, self).__init__()
+    def __init__(self, in_features, hidden_size, kernel, depth=False):
+        super(  Conv, self).__init__()
 
         self.hidden_size = hidden_size
-        self.depth = nn.Conv1d(in_features, in_features, kernel, padding=kernel//2, groups=in_features)
-        self.ptwise = nn.Conv1d(in_features, hidden_size, 1)
+        if depth:
+            self.cnns = nn.ModuleList([ \
+                nn.Conv1d(in_features, in_features, kernel, padding=kernel//2, groups=in_features), \
+                nn.Conv1d(in_features, hidden_size, 1)])
+        else:
+            self.cnns = nn.ModuleList([nn.Conv1d(in_features, hidden_size, kernel, padding=kernel//2)])
 
-    def forward(self, x):
-
+    def forward(self, x, mask):
+        nmask = mask.unsqueeze(2).type(torch.float32)
+        x = nmask * x
+        
         out = x.permute(0,2,1)
-        out = self.depth(out)
-        out = self.ptwise(out)
+
+        for c in self.cnns:
+            result = c(out) 
+            out = result      
 
         out = out.permute(0, 2, 1)
 
-        assert x.size()[0:2] == out.size()[0:2]
-        assert out.size()[2] == self.hidden_size
+        assert x.size()[0:2] == out.size()[0:2], '{} {}'.format(x.size(), out.size())
+        assert out.size()[2] == self.hidden_size, '{} {}'.format(out.size()[2], self.hidden_size)
 
         return out
 
