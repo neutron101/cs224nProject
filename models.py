@@ -1,7 +1,4 @@
 """Top-level model classes.
-
-Author:
-    Chris Chute (chute@stanford.edu)
 """
 
 import layers
@@ -38,49 +35,54 @@ class QANet(nn.Module):
 
         self.drop = nn.Dropout(self.drop_prob)
 
-        self.reduc = Conv(4*hidden_size, hidden_size, 5)
+        # self.reduc = Conv(4*hidden_size, hidden_size, 5)
 
     def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
 
-        st = T()
+        ###################
+        # Embedding 
+        ###################
+
         cemb = self.embed(cw_idxs, cc_idxs) #(batch_size, c_len, p1+p2=500)
         qemb = self.embed(qw_idxs, qc_idxs) #(batch_size, q_len, p1+p2=500)
-        mypr('Emb', T()-st)
 
-        st = T()
+        ###################
+        # Embedding Encoder
+        ###################
+
         cemb = self.emb_enc(cemb, c_mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
-        mypr('Con Emb Enc', T()-st)
-        st = T()
         qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
-        mypr('Query Emb Enc', T()-st) 
 
-        st = T()
+
+        ###################
+        # Context - Query Attention
+        ###################
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
-        mypr('Att', T()-st)
-
         att = self.drop(att)
+        # print('Att shape', att.size())
+        # input('Move..........')
 
-        st = T()
+        ###################
+        # Model Encoder
+        ###################
+
         mask = c_mask
         model0 = self.model_enc(att, mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
         model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
-        mypr('Model Enc', T()-st)
-
         
         # model1 = self.conv(att, c_mask)
         # model2 = self.conv(att, c_mask)
         # model0 = torch.zeros_like(model1)
-
         
-        st = T()
+        ###################
+        # Output Layer
+        ###################
+
         out = self.out(model0, model1, model2, c_mask) #(p1, p2)
-        mypr('Out', T()-st)
+
+        # input('Move..........')
 
         return out
-
-    def conv(self, x, mask):
-        return self.reduc(x, mask)
-

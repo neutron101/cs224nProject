@@ -36,18 +36,22 @@ class PosEmb(object):
             print('Hidden size must be atleast 2')
             exit()
 
-        pos_emb = torch.zeros((pos, hidden_size))
-        it = hidden_size - (hidden_size%2)
-        for p in range(pos):
-            for h in range(0, it, 2):
-                pos_emb[p,h] = np.sin(pos/np.power(10000, h/hidden_size))
-                pos_emb[p,h+1] = np.cos(pos/np.power(10000, h/hidden_size))
+        pos_emb = np.zeros((pos, hidden_size))
 
-            if hidden_size%2 != 0:
-                pos_emb[p,it] = np.sin(pos/np.power(10000, it/hidden_size))
+        hsp = np.linspace(0, pos-1, pos)
+        hs = np.linspace(0, hidden_size-1, hidden_size)
+        hs = 1/np.power(10000, hs/hidden_size)
+        hs = np.outer(hsp, hs)
+        hss = np.sin(hs)
+        hsc = np.cos(hs)
 
-        return pos_emb
-        
+        pos_emb[:,0::2] = hss[:,0::2]
+        pos_emb[:,1::2] = hsc[:,0:(2*(hidden_size//2)):2]
+
+        pos_emb_t = torch.FloatTensor(pos_emb)
+        return pos_emb_t
+
+
 class SQuAD(data.Dataset):
     """Stanford Question Answering Dataset (SQuAD).
 

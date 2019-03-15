@@ -54,7 +54,34 @@ class QANetEncoderLayer(nn.Module):
         return emb
 
 
-    
+class QANetEncoderBlock(nn.Module):
+
+    def __init__(self, hidden_size, conv_layers, kernel, heads, pL):
+        super(QANetEncoderBlock, self).__init__()
+
+        self.cnns = nn.ModuleList([ResBlock(Conv(hidden_size, hidden_size, kernel, depth=True), hidden_size) \
+                                         for _ in range(conv_layers)])
+
+        self.att = ResBlock(QANetAttBlock(hidden_size, heads=heads), hidden_size)
+        
+        self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
+        self.pL = pL
+
+
+    def forward(self, x, mask, depth, total_runs):
+
+        out = x
+        for c in self.cnns:
+            depth+=1
+            survival = 1.0      #(1-(depth/total_runs)*(self.pL))
+            if torch.rand(1) <= survival:
+                out = c(out, mask)
+
+        out = self.att(out, mask)
+        out = self.feedforward(out)
+        
+        return out, depth
+
 
 class QANetAttBlock(nn.Module):
     """docstring for QANetAttBlock"""
@@ -84,10 +111,14 @@ class QANetAttBlock(nn.Module):
     def attn(self, Q, K, V, mask):
         
         nmask = mask.unsqueeze(1).expand(-1, 1, -1)
+        # print('Att Mask shape', nmask.size(), 'Q shape', Q.size())
+        # print('Att Mask', nmask[0])
 
         res = torch.matmul(Q, torch.transpose(K,1,2))
         res = torch.div(res, self.dkroot)
         res = self.masked_softmax(res, nmask)
+        # print('Res shape', res.size(), 'V shape', V.size())
+        # print('Res', res[0])
         attn = torch.matmul(res, V) 
 
         return attn
@@ -100,34 +131,6 @@ class QANetAttBlock(nn.Module):
         mask = mask.transpose(1,2)
         probs = probs * mask
         return probs
-
-class QANetEncoderBlock(nn.Module):
-
-    def __init__(self, hidden_size, conv_layers, kernel, heads, pL):
-        super(QANetEncoderBlock, self).__init__()
-
-        self.cnns = nn.ModuleList([ResBlock(Conv(hidden_size, hidden_size, kernel, depth=True), hidden_size) \
-                                         for _ in range(conv_layers)])
-
-        self.att = ResBlock(QANetAttBlock(hidden_size, heads=heads), hidden_size)
-        
-        self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
-        self.pL = pL
-
-
-    def forward(self, x, mask, depth, total_runs):
-
-        out = x
-        for c in self.cnns:
-            depth+=1
-            survival = (1-(depth/total_runs)*(self.pL))
-            if torch.rand(1) <= survival:
-                out = c(out, mask)
-
-        out = self.att(out, mask)
-        out = self.feedforward(out)
-        
-        return out, depth
 
 
 class Conv(nn.Module):
@@ -145,6 +148,7 @@ class Conv(nn.Module):
 
     def forward(self, x, mask):
         nmask = mask.unsqueeze(2).type(torch.float32)
+        # Optional
         # x = nmask * x
         
         out = x.permute(0,2,1)
@@ -300,11 +304,16 @@ class QANetEmbedding(nn.Module):
 
         emb = self.embed(x) 
         unk_emb = self.embed_unk(torch.tensor([[0]], dtype=torch.long, device=x.device))
+        # print('Unknown', unk_emb)
         
         mask = x.eq(self.UNK)
         mask = mask.type(torch.float32)
         mask = mask.unsqueeze(2)
+        # print('mask', mask.shape, mask[0])
+        # n = mask*unk_emb
+        # print('masked vec', n[0])
         emb = (1-mask)*emb + mask*unk_emb
+        # print('final vec', emb[0])
 
         return emb
 
