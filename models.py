@@ -10,7 +10,6 @@ from time import time as T
 from util import PosEmb
 from util import mypr
 from layers import Conv
-# from attnmask import *
 
 
 class QANet(nn.Module):
