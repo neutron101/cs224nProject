@@ -10,6 +10,7 @@ from time import time as T
 from util import PosEmb
 from util import mypr
 from layers import Conv
+# from attnmask import *
 
 
 class QANet(nn.Module):
@@ -40,6 +41,11 @@ class QANet(nn.Module):
     def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
+
+        # at = Att.get_non_pad_mask(cw_idxs)
+        # print(at.shape)
+        # print(c_mask.shape, c_mask)
+        # exit()
 
         ###################
         # Embedding 
