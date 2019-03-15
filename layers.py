@@ -20,9 +20,7 @@ class QANetEncoderLayer(nn.Module):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(hidden_size=hidden_size, \
-                            conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL)) for _ in range(blocks)])
-
-        self.pos_emb = pos_emb
+                            conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL), pos_emb=pos_emb) for _ in range(blocks)])
 
         self.dim_mapper = Conv(infeatures, hidden_size, kernel)
         self.total_runs = blocks*conv_layers
@@ -37,15 +35,6 @@ class QANetEncoderLayer(nn.Module):
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
 
-            p_emb = self.pos_emb.emb[0:emb.size(1),:]
-            p_emb = p_emb.unsqueeze(0)
-            nmask = mask.unsqueeze(-1).type(torch.float32)
-            p_emb = p_emb.to(emb.device)
-            p_emb = p_emb * nmask            
-
-            p_emb = p_emb.to(emb.device)
-            emb = emb + p_emb
-
         depth = 0
         # Move blocks forward
         for b in self.blocks:
@@ -57,7 +46,7 @@ class QANetEncoderLayer(nn.Module):
 
 class QANetEncoderBlock(nn.Module):
 
-    def __init__(self, hidden_size, conv_layers, kernel, heads, pL, dropout=0.1):
+    def __init__(self, hidden_size, conv_layers, kernel, heads, pL, pos_emb, dropout=0.1):
         super(QANetEncoderBlock, self).__init__()
 
         self.cnns = nn.ModuleList([ResBlock(Conv(hidden_size, hidden_size, kernel, depth=True), hidden_size) \
@@ -68,23 +57,26 @@ class QANetEncoderBlock(nn.Module):
         self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
         self.pL = pL
         self.dropout = nn.Dropout(dropout)
-
+        self.pos_emb = pos_emb
 
     def forward(self, x, mask, depth, total_runs):
 
-        out = x
+        p_emb = self.pos_emb.emb[0:x.size(1),:]
+        p_emb = p_emb.unsqueeze(0)
+        nmask = mask.unsqueeze(-1).type(torch.float32)
+        p_emb = p_emb.to(x.device)
+        p_emb = p_emb * nmask            
+
+        out = x + p_emb
+
         for c in self.cnns:
             depth+=1
             survival = 1.0      #(1-(depth/total_runs)*(self.pL))
             if torch.rand(1) <= survival:
                 out = c(out, mask)
-                # out = self.dropout(out)
 
         out = self.att(out, mask)
-        # out = self.dropout(out)
-
         out = self.feedforward(out)
-        # out = self.dropout(out)
         
         return out, depth
 

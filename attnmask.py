@@ -15,7 +15,9 @@ class Att(nn.Module):
     @classmethod
     def get_non_pad_mask(cls, seq):
         assert seq.dim() == 2
-        return seq.ne(0).type(torch.float).unsqueeze(-1)
+        mask = seq.ne(0).type(torch.float).unsqueeze(-1)
+
+        return mask
 
     @classmethod
     def get_attn_key_pad_mask(cls, seq_k, seq_q):
@@ -50,14 +52,9 @@ class MultiHeadAttention(nn.Module):
         self.w_qs = nn.Linear(d_model, n_head * d_k)
         self.w_ks = nn.Linear(d_model, n_head * d_k)
         self.w_vs = nn.Linear(d_model, n_head * d_v)
-        nn.init.normal_(self.w_qs.weight, mean=0, std=np.sqrt(2.0 / (d_model + d_k)))
-        nn.init.normal_(self.w_ks.weight, mean=0, std=np.sqrt(2.0 / (d_model + d_k)))
-        nn.init.normal_(self.w_vs.weight, mean=0, std=np.sqrt(2.0 / (d_model + d_v)))
 
         self.attention = ScaledDotProductAttention(temperature=np.power(d_k, 0.5))
-
         self.fc = nn.Linear(n_head * d_v, d_model)
-        nn.init.xavier_normal_(self.fc.weight)
 
 
     def forward(self, q, k, v, mask=None):
@@ -95,7 +92,6 @@ class ScaledDotProductAttention(nn.Module):
     def __init__(self, temperature, attn_dropout=0.1):
         super(ScaledDotProductAttention, self).__init__()
         self.temperature = temperature
-        self.dropout = nn.Dropout(attn_dropout)
         self.softmax = nn.Softmax(dim=2)
 
     def forward(self, q, k, v, mask=None):
@@ -107,7 +103,6 @@ class ScaledDotProductAttention(nn.Module):
             attn = attn.masked_fill(mask, -np.inf)
 
         attn = self.softmax(attn)
-        attn = self.dropout(attn)
         output = torch.bmm(attn, v)
 
         return output, attn

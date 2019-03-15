@@ -51,8 +51,8 @@ def main(args):
                   char_vectors=char_vectors,
                   drop_prob=args.drop_prob,
                   device=device,
-                  hidden_size=64, #args.hidden_size,
-                  b1=1, b2=7, heads=2)
+                  hidden_size=96, #args.hidden_size,
+                  b1=1, b2=7, heads=4)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info('Loading checkpoint from {}...'.format(args.load_path))
