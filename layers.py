@@ -20,10 +20,11 @@ class QANetEncoderLayer(nn.Module):
         super(QANetEncoderLayer, self).__init__()
 
         self.blocks = nn.ModuleList([QANetEncoderBlock(hidden_size=hidden_size, \
-                            conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL), pos_emb=pos_emb) for _ in range(blocks)])
+                            conv_layers=conv_layers, kernel=kernel, heads=heads, pL=(1-pL)) for _ in range(blocks)])
 
         self.dim_mapper = Conv(infeatures, hidden_size, kernel)
         self.total_runs = blocks*conv_layers
+        self.pos_emb = pos_emb
 
     def forward(self, emb, mask, use_pos_emb=False):
 
@@ -33,6 +34,14 @@ class QANetEncoderLayer(nn.Module):
             emb = self.dim_mapper(emb, mask, 1)
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
+
+            p_emb = self.pos_emb.emb[0:emb.size(1),:]
+            p_emb = p_emb.unsqueeze(0)
+            nmask = mask.unsqueeze(-1).type(torch.float32)
+            p_emb = p_emb.to(emb.device)
+            p_emb = p_emb * nmask            
+
+            emb = emb + p_emb
 
         depth = 0
         # Move blocks forward
@@ -44,7 +53,7 @@ class QANetEncoderLayer(nn.Module):
 
 class QANetEncoderBlock(nn.Module):
 
-    def __init__(self, hidden_size, conv_layers, kernel, heads, pL, pos_emb, dropout=0.1):
+    def __init__(self, hidden_size, conv_layers, kernel, heads, pL, dropout=0.1):
         super(QANetEncoderBlock, self).__init__()
 
         self.cnns = nn.ModuleList([ResBlock(Conv(hidden_size, hidden_size, kernel, depth=True), hidden_size) \
@@ -54,17 +63,11 @@ class QANetEncoderBlock(nn.Module):
         
         self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, False), hidden_size)
         self.pL = pL
-        self.pos_emb = pos_emb
+        
 
-    def forward(self, x, mask, depth, total_runs):
+    def forward(self, x, mask, depth, total_runs):         
 
-        p_emb = self.pos_emb.emb[0:x.size(1),:]
-        p_emb = p_emb.unsqueeze(0)
-        nmask = mask.unsqueeze(-1).type(torch.float32)
-        p_emb = p_emb.to(x.device)
-        p_emb = p_emb * nmask            
-
-        out = x + p_emb
+        out = x
 
         for c in self.cnns:
             depth += 1
@@ -110,7 +113,8 @@ class QANetAttBlock(nn.Module):
         x = self.norm(x)
         non_pad_mask = Att.get_non_pad_mask(mask)
         attn_mask = Att.get_attn_key_pad_mask(mask, mask)
-        attn = self.mAtt.att(x, attn_mask, non_pad_mask)
+        attn = self.mAtt.att(x, attn_mask) + x
+        attn = attn * non_pad_mask
 
         return attn 
 

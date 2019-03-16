@@ -31,10 +31,9 @@ class Att(nn.Module):
         return padding_mask
 
 
-    def att(self, enc_input, slf_attn_mask, non_pad_mask):
+    def att(self, enc_input, slf_attn_mask):
     	enc_output, enc_slf_attn = self.slf_attn(
     	    enc_input, enc_input, enc_input, mask=slf_attn_mask)
-    	enc_output *= non_pad_mask
     	return enc_output
 
 
@@ -65,8 +64,6 @@ class MultiHeadAttention(nn.Module):
         sz_b, len_k, _ = k.size()
         sz_b, len_v, _ = v.size()
 
-        residual = q
-
         q = self.w_qs(q).view(sz_b, len_q, n_head, d_k)
         k = self.w_ks(k).view(sz_b, len_k, n_head, d_k)
         v = self.w_vs(v).view(sz_b, len_v, n_head, d_v)
@@ -82,7 +79,7 @@ class MultiHeadAttention(nn.Module):
         output = output.permute(1, 2, 0, 3).contiguous().view(sz_b, len_q, -1) # b x lq x (n*dv)
 
         output = self.fc(output)
-        output = output + residual
+        output = output
 
         return output, attn
 
