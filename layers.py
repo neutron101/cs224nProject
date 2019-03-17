@@ -59,12 +59,10 @@ class QANetEncoderBlock(nn.Module):
 
     def forward(self, emb, mask, depth, total_runs):         
 
-        p_emb = self.pos_emb.emb[0:emb.size(1),:]
+        p_emb = self.pos_emb.cal_pos_emb(emb.size(1), emb.size(-1))
         p_emb = p_emb.unsqueeze(0)
-        nmask = mask.unsqueeze(-1).type(torch.float32)
         p_emb = p_emb.to(emb.device)
-        p_emb = p_emb * nmask   
-        emb = emb + p_emb         
+        emb = emb + p_emb  
 
         out = emb
         for c in self.cnns:
