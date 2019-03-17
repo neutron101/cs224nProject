@@ -85,58 +85,56 @@ class QANetAttBlock(nn.Module):
         super(QANetAttBlock, self).__init__()
 
         dk = hidden_size//heads
-        # self.heads = heads
-        # self.W_q = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
-        # self.W_k = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
-        # self.W_v = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
+        self.heads = heads
+        self.W_q = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
+        self.W_k = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
+        self.W_v = nn.ModuleList([nn.Linear(hidden_size, dk, False) for _ in range(heads)])
 
-        # self.W_out = nn.Linear(heads*dk, hidden_size, False)
-        # self.sfmax = nn.Softmax(dim=2)
-        # self.dkroot = np.sqrt(dk)
+        self.W_out = nn.Linear(heads*dk, hidden_size, False)
+        self.sfmax = nn.Softmax(dim=2)
+        self.dkroot = np.sqrt(dk)
 
         self.norm = nn.LayerNorm(hidden_size)
-        self.mAtt = Att(heads, hidden_size, dk, dk, dropout=1.)
+        # self.mAtt = Att(heads, hidden_size, dk, dk, dropout=1.)
     
     def forward(self, x, mask):
                 
-        # nmask = mask.unsqueeze(1).expand(-1, 1, -1)
-        # nmask = nmask.type(torch.float32)
-        # h = []
-        # for W_q, W_k, W_v in zip(self.W_q, self.W_k, self.W_v):
-        #     h.append(self.attn(W_q(x), W_k(x), W_v(x), nmask))
-
-        # attn = self.W_out(torch.cat(h, dim=2))
-        # attn = attn + x
-        # nmask = nmask.transpose(1,2)
-        # attn = attn * nmask
-
         x = self.norm(x)
-        non_pad_mask = Att.get_non_pad_mask(mask)
-        attn_mask = Att.get_attn_key_pad_mask(mask, mask)
-        attn = self.mAtt.att(x, attn_mask) + x
-        attn = attn * non_pad_mask
+
+        nmask = mask.unsqueeze(1).expand(-1, 1, -1)
+        nmask = nmask.type(torch.float32)
+        h = []
+        for W_q, W_k, W_v in zip(self.W_q, self.W_k, self.W_v):
+            h.append(self.attn(W_q(x), W_k(x), W_v(x), nmask))
+
+        attn = self.W_out(torch.cat(h, dim=2))
+        attn = attn + x
+        nmask = nmask.transpose(1,2)
+        attn = attn * nmask
+
+        
+        # non_pad_mask = Att.get_non_pad_mask(mask)
+        # attn_mask = Att.get_attn_key_pad_mask(mask, mask)
+        # attn = self.mAtt.att(x, attn_mask) + x
+        # attn = attn * non_pad_mask
 
         return attn 
 
 
-    # def attn(self, Q, K, V, mask):
+    def attn(self, Q, K, V, mask):
         
-    #     res = torch.matmul(Q, torch.transpose(K,1,2))
-    #     res = torch.div(res, self.dkroot)
-    #     res = self.masked_softmax(res, mask)
-    #     # print('Res shape', res.size(), 'V shape', V.size())
-    #     # print('Res', res[0])
-    #     attn = torch.matmul(res, V) 
+        res = torch.matmul(Q, torch.transpose(K,1,2))
+        res = torch.div(res, self.dkroot)
+        res = self.masked_softmax(res, mask)
+        attn = torch.matmul(res, V) 
 
-    #     return attn
+        return attn
 
 
-    # def masked_softmax(self, logits, mask):
-    #     masked_logits = mask * logits + (1 - mask) * -1e30
-    #     probs = self.sfmax(masked_logits)
-    #     # mask = mask.transpose(1,2)
-    #     # probs = probs * mask
-    #     return probs
+    def masked_softmax(self, logits, mask):
+        masked_logits = mask * logits + (1 - mask) * -1e30
+        probs = self.sfmax(masked_logits)
+        return probs
 
 
 class Conv(nn.Module):
