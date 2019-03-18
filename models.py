@@ -14,7 +14,7 @@ from layers import Conv
 
 class QANet(nn.Module):
 
-    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, b1=1, b2=7, heads=8, device=None):
+    def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, b1=1, b2=7, heads=8):
         super(QANet, self).__init__()
 
         pos_emb = PosEmbOrig(450, hidden_size)
@@ -52,14 +52,14 @@ class QANet(nn.Module):
 
         cemb = self.emb_enc(cemb, c_mask, reduc_dim=True) #(batch_size, c_len, hidden_size)
         qemb = self.emb_enc(qemb, q_mask, reduc_dim=True) #(batch_size, q_len, hidden_size)
-        cemb = self.drop(cemb)
-        qemb = self.drop(qemb)
+        #cemb = self.drop(cemb)
+        #qemb = self.drop(qemb)
 
         ###################
         # Context - Query Attention
         ###################
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
-        att = self.drop(att)
+        # att = self.drop(att)
 
         ###################
         # Model Encoder
@@ -69,9 +69,9 @@ class QANet(nn.Module):
         model0 = self.model_enc(att, mask, reduc_dim=True) #(batch_size, c_len, hidden_size)
         model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
-        model0 = self.drop(model0)
-        model1 = self.drop(model1)
-        model2 = self.drop(model2)
+        #model0 = self.drop(model0)
+        #model1 = self.drop(model1)
+        #model2 = self.drop(model2)
 
         
         ###################

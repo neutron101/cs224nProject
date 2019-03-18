@@ -236,7 +236,7 @@ def add_train_test_args(parser):
                         help='Whether to use SQuAD 2.0 (unanswerable) questions.')
     parser.add_argument('--hidden_size',
                         type=int,
-                        default=128,
+                        default=96,
                         help='Number of features in encoder hidden layers.')
     parser.add_argument('--num_visuals',
                         type=int,
@@ -246,6 +246,10 @@ def add_train_test_args(parser):
                         type=str,
                         default=None,
                         help='Path to load as a model checkpoint.')
+    parser.add_argument('--heads',
+                        type=int,
+                        default=8,
+                        help='Number of heads in the attention layers.')
 
 def add_model_args(parser):
 

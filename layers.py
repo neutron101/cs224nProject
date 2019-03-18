@@ -51,7 +51,6 @@ class QANetEncoderBlock(nn.Module):
         self.att = QANetAttBlock(hidden_size, heads=heads)
         
         self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, True), hidden_size)
-        self.ff = nn.Linear(hidden_size, hidden_size, True)
         self.pL = pL
         self.pos_emb = pos_emb
 
@@ -59,10 +58,10 @@ class QANetEncoderBlock(nn.Module):
     def forward(self, emb, mask, depth, total_runs):         
 
         # Get positional embedding
-        p_emb = self.pos_emb.emb[0:emb.size(1), :]
-        p_emb = p_emb.unsqueeze(0)
-        p_emb = p_emb.to(emb.device)
-        emb = emb + p_emb  
+        # p_emb = self.pos_emb.emb[0:emb.size(1), :]
+        # p_emb = p_emb.unsqueeze(0)
+        # p_emb = p_emb.to(emb.device)
+        # emb = emb + p_emb  
 
         out = emb
         for c in self.cnns:
@@ -71,7 +70,6 @@ class QANetEncoderBlock(nn.Module):
 
         out = self.att(out, mask)
         out = self.feedforward(out)
-        out = self.ff(out)
         out = F.relu(out)
         
         return out, depth
@@ -298,16 +296,12 @@ class QANetEmbedding(nn.Module):
 
         emb = self.embed(x) 
         unk_emb = self.embed_unk(torch.tensor([[0]], dtype=torch.long, device=x.device))
-        # print('Unknown', unk_emb)
         
         mask = x.eq(self.UNK)
+        # mask[:,0] = 0
         mask = mask.type(torch.float32)
         mask = mask.unsqueeze(2)
-        # print('mask', mask.shape, mask[0])
-        # n = mask*unk_emb
-        # print('masked vec', n[0])
         emb = (1-mask)*emb + mask*unk_emb
-        # print('final vec', emb[0])
 
         return emb
 
@@ -365,8 +359,6 @@ class BiDAFAttention(nn.Module):
         for weight in (self.c_weight, self.q_weight, self.cq_weight):
             nn.init.xavier_uniform_(weight)
         self.bias = nn.Parameter(torch.zeros(1))
-
-        self.multi_dot_sim = nn.Linear(3*hidden_size, 3*hidden_size, True)
 
     def forward(self, c, q, c_mask, q_mask):
         batch_size, c_len, _ = c.size()
