@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from time import time as T
-from util import PosEmb
+from util import PosEmbOrig
 from util import mypr
 from layers import Conv
 
@@ -17,7 +17,7 @@ class QANet(nn.Module):
     def __init__(self, word_vectors, char_vectors, hidden_size=128, drop_prob=0.1, b1=1, b2=7, heads=8, device=None):
         super(QANet, self).__init__()
 
-        pos_emb = PosEmb(450, hidden_size)
+        pos_emb = PosEmbOrig(450, hidden_size)
         self.embed = layers.QANetEmbedding(word_vectors, char_vectors)
         
         infeatures = word_vectors.size(-1) + char_vectors.size(-1)
@@ -50,39 +50,34 @@ class QANet(nn.Module):
         # Embedding Encoder
         ###################
 
-        cemb = self.emb_enc(cemb, c_mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
-        qemb = self.emb_enc(qemb, q_mask, use_pos_emb=True) #(batch_size, q_len, hidden_size)
-        # cemb = self.drop(cemb)
-        # qemb = self.drop(qemb)
+        cemb = self.emb_enc(cemb, c_mask, reduc_dim=True) #(batch_size, c_len, hidden_size)
+        qemb = self.emb_enc(qemb, q_mask, reduc_dim=True) #(batch_size, q_len, hidden_size)
+        cemb = self.drop(cemb)
+        qemb = self.drop(qemb)
 
         ###################
         # Context - Query Attention
         ###################
         att = self.att(cemb, qemb, c_mask, q_mask) #(batch_size, c_len, 4*hidden_size)
-        # att = self.drop(att)
+        att = self.drop(att)
 
         ###################
         # Model Encoder
         ###################
 
         mask = c_mask
-        model0 = self.model_enc(att, mask, use_pos_emb=True) #(batch_size, c_len, hidden_size)
+        model0 = self.model_enc(att, mask, reduc_dim=True) #(batch_size, c_len, hidden_size)
         model1 = self.model_enc(model0, mask) #(batch_size, c_len, hidden_size)
         model2 = self.model_enc(model1, mask) #(batch_size, c_len, hidden_size)
-        # model0 = self.drop(model0)
-        # model1 = self.drop(model1)
-        # model2 = self.drop(model2)
+        model0 = self.drop(model0)
+        model1 = self.drop(model1)
+        model2 = self.drop(model2)
 
-        # model1 = self.conv(att, c_mask)
-        # model2 = self.conv(att, c_mask)
-        # model0 = torch.zeros_like(model1)
         
         ###################
         # Output Layer
         ###################
 
         out = self.out(model0, model1, model2, c_mask) #(p1, p2)
-
-        # input('Move..........')
 
         return out

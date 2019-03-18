@@ -15,6 +15,7 @@ import torch.utils.data as data
 import tqdm
 import numpy as np
 import ujson as json
+import math
 
 from collections import Counter
 
@@ -24,32 +25,36 @@ def mypr(*string):
     if print_flag:
         print(string)
 
-class PosEmb(object):
-    """docstring for pos_emb"""
+class PosEmbOrig(object):
+    """docstring for pos_emb
+
+    Inspired by code at: https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/layers/common_attention.py
+    """
     def __init__(self, max, hidden_size):
-        super(PosEmb, self).__init__()
+        super(PosEmbOrig, self).__init__()
         self.emb = self.cal_pos_emb(max, hidden_size)
 
     def cal_pos_emb(self, pos, hidden_size):
 
-        if hidden_size < 2:
-            print('Hidden size must be atleast 2')
+        if hidden_size < 4:
+            print('Hidden size must be atleast 4. Exiting....')
             exit()
 
         pos_emb = np.zeros((pos, hidden_size))
 
         hsp = np.linspace(0, pos-1, pos)
-        hs = np.linspace(0, hidden_size-1, hidden_size)
-        hs = 1/np.power(10000, hs/hidden_size)
-        hs = np.outer(hsp, hs)
-        hss = np.sin(hs)
-        hsc = np.cos(hs)
+        num_timescales = hidden_size // 2
+        log_timescale_increment = math.log(10000) / (num_timescales - 1)
+        inv_timescales = np.exp(np.linspace(0, num_timescales-1, num_timescales) * -log_timescale_increment)
+        scaled_time = np.outer(hsp, inv_timescales) 
 
-        pos_emb[:,0::2] = hss[:,0::2]
-        pos_emb[:,1::2] = hsc[:,0:(2*(hidden_size//2)):2]
+        hss = np.sin(scaled_time)
+        hsc = np.cos(scaled_time)
 
-        pos_emb_t = torch.FloatTensor(pos_emb)
-        return pos_emb_t
+        pos_emb[:, 0:hss.shape[1]] = hss
+        pos_emb[:, hss.shape[1]:hss.shape[1]+hsc.shape[1]] = hsc
+
+        return torch.FloatTensor(pos_emb)
 
 
 class SQuAD(data.Dataset):

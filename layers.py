@@ -12,7 +12,6 @@ from util import masked_softmax
 import numpy as np
 from time import time as T
 from util import mypr
-from attnmask import *
         
 class QANetEncoderLayer(nn.Module):
 
@@ -25,12 +24,11 @@ class QANetEncoderLayer(nn.Module):
         self.dim_mapper = Conv(infeatures, hidden_size, 1)
         self.total_runs = blocks*conv_layers
 
-    def forward(self, emb, mask, use_pos_emb=False):
+    def forward(self, emb, mask, reduc_dim=False):
 
-        # Get positional embedding
-        if use_pos_emb:
+        if reduc_dim:
             sa = emb.size()
-            emb = self.dim_mapper(emb, mask, 1)
+            emb = self.dim_mapper(emb, mask)
             sb = emb.size()
             assert sa[0:2] == sb[0:2]
 
@@ -53,13 +51,15 @@ class QANetEncoderBlock(nn.Module):
         self.att = QANetAttBlock(hidden_size, heads=heads)
         
         self.feedforward = ResBlock(nn.Linear(hidden_size, hidden_size, True), hidden_size)
+        self.ff = nn.Linear(hidden_size, hidden_size, True)
         self.pL = pL
         self.pos_emb = pos_emb
 
 
     def forward(self, emb, mask, depth, total_runs):         
 
-        p_emb = self.pos_emb.cal_pos_emb(emb.size(1), emb.size(-1))
+        # Get positional embedding
+        p_emb = self.pos_emb.emb[emb.size(1), :]
         p_emb = p_emb.unsqueeze(0)
         p_emb = p_emb.to(emb.device)
         emb = emb + p_emb  
@@ -67,10 +67,11 @@ class QANetEncoderBlock(nn.Module):
         out = emb
         for c in self.cnns:
             depth += 1
-            out = c(out, mask, 1.) #1-(depth/total_runs)*(self.pL))
+            out = c(out, mask)
 
         out = self.att(out, mask)
         out = self.feedforward(out)
+        out = self.ff(out)
         out = F.relu(out)
         
         return out, depth
@@ -92,7 +93,7 @@ class QANetAttBlock(nn.Module):
         self.dkroot = np.sqrt(dk)
 
         self.norm = nn.LayerNorm(hidden_size)
-        # self.mAtt = Att(heads, hidden_size, dk, dk, dropout=1.)
+
     
     def forward(self, x, mask):
                 
@@ -108,12 +109,6 @@ class QANetAttBlock(nn.Module):
         attn = attn + x
         nmask = nmask.transpose(1,2)
         attn = attn * nmask
-
-        
-        # non_pad_mask = Att.get_non_pad_mask(mask)
-        # attn_mask = Att.get_attn_key_pad_mask(mask, mask)
-        # attn = self.mAtt.att(x, attn_mask) + x
-        # attn = attn * non_pad_mask
 
         return attn 
 
@@ -147,7 +142,7 @@ class Conv(nn.Module):
         else:
             self.cnns = nn.ModuleList([nn.Conv1d(in_features, hidden_size, kernel, padding=kernel//2)])
 
-    def forward(self, x, mask, survival_ratio):
+    def forward(self, x, mask):
         nmask = mask.unsqueeze(2).type(torch.float32)
         # Optional
         # x = nmask * x
@@ -158,7 +153,6 @@ class Conv(nn.Module):
             result = c(out)
             out = result      
 
-        out = out / survival_ratio
         out = out.permute(0, 2, 1)
 
         assert x.size()[0:2] == out.size()[0:2], '{} {}'.format(x.size(), out.size())
