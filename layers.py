@@ -59,7 +59,7 @@ class QANetEncoderBlock(nn.Module):
     def forward(self, emb, mask, depth, total_runs):         
 
         # Get positional embedding
-        p_emb = self.pos_emb.emb[emb.size(1), :]
+        p_emb = self.pos_emb.emb[0:emb.size(1), :]
         p_emb = p_emb.unsqueeze(0)
         p_emb = p_emb.to(emb.device)
         emb = emb + p_emb  
@@ -365,6 +365,8 @@ class BiDAFAttention(nn.Module):
         for weight in (self.c_weight, self.q_weight, self.cq_weight):
             nn.init.xavier_uniform_(weight)
         self.bias = nn.Parameter(torch.zeros(1))
+
+        self.multi_dot_sim = nn.Linear(3*hidden_size, 3*hidden_size, True)
 
     def forward(self, c, q, c_mask, q_mask):
         batch_size, c_len, _ = c.size()
